@@ -3,7 +3,8 @@ all: readme.md
 github = https://raw.githubusercontent.com/deanturpin
 
 readme.md: all_orders.csv
-	@echo '<pre>' > $@
+	cat template.md > $@
+	@echo '<pre>' >> $@
 	cat all_orders.csv >> $@
 	@echo '<pre>' >> $@
 
