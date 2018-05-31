@@ -1,4 +1,4 @@
-script: make clean all
+script: make clean all && cat readme.md
 
 deploy:
   provider: pages
