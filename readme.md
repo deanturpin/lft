@@ -2,11 +2,9 @@
 
 [Working out how to] execute trades on Binance and Coinbase.
 
+Thu 31 May 14:56:58 BST 2018
 <pre>
-CMT*	ETH	5.00_average_comp2	Binance	0.000703
-CMT*	ETH	10.0_stepping_down	Binance	0.000703
-</pre>
-<pre>
-CMT*	ETH	5.00_average_comp2	Binance	0.0007001
-CMT*	ETH	10.0_stepping_down	Binance	0.0007001
+AE	BNB	2.50_average_under	Binance	0.2292
+CMT*	BNB	2.50_average_under	Binance	0.02616
+GNT	BNB	2.50_average_under	Binance	0.04534
 </pre>
