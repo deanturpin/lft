@@ -320,8 +320,8 @@ std::expected<std::vector<Bar>, AlpacaError> AlpacaClient::get_bars(
     auto client = httplib::Client{data_url_};
     client.set_connection_timeout(30);
 
-    // Build request path for stock bars
-    auto path = std::format("/v2/stocks/{}/bars?timeframe={}&start={}&end={}&limit=10000",
+    // Build request path for stock bars (using IEX feed for free tier)
+    auto path = std::format("/v2/stocks/{}/bars?timeframe={}&start={}&end={}&limit=10000&feed=iex",
                            symbol, timeframe, start, end);
 
     httplib::Headers headers = {
