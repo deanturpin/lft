@@ -167,140 +167,134 @@ void process_bar(const std::string& symbol,
 } // anonymous namespace
 
 int main() {
-    try {
-        auto client = lft::AlpacaClient{};
+    auto client = lft::AlpacaClient{};
 
-        if (not client.is_valid()) {
-            std::println("❌ ALPACA_API_KEY and ALPACA_API_SECRET must be set");
-            return 1;
+    if (not client.is_valid()) {
+        std::println("❌ ALPACA_API_KEY and ALPACA_API_SECRET must be set");
+        return 1;
+    }
+
+    std::println("{}🔬 LFT BACKTESTING ENGINE{}", colour_cyan, colour_reset);
+    std::println("Testing multi-strategy system on historic data\n");
+
+    // Same watchlist as live ticker
+    auto stocks = std::vector<std::string>{
+        "AAPL", "TSLA", "NVDA", "MSFT", "GOOGL", "AMZN", "META"};
+    auto crypto = std::vector<std::string>{
+        "BTC/USD", "ETH/USD"};
+
+    // Backtest period: last 30 days of 1-minute bars
+    auto now = std::chrono::system_clock::now();
+    auto thirty_days_ago = now - std::chrono::hours(24 * 30);
+
+    auto start = std::format("{:%Y-%m-%dT%H:%M:%SZ}", thirty_days_ago);
+    auto end = std::format("{:%Y-%m-%dT%H:%M:%SZ}", now);
+
+    std::println("Period: {} to {}", start, end);
+    std::println("Timeframe: 1 minute bars");
+    std::println("Initial capital: $10,000\n");
+
+    // Initialise backtest stats
+    auto stats = BacktestStats{};
+    stats.strategy_stats["dip"] = lft::StrategyStats{"dip"};
+    stats.strategy_stats["ma_crossover"] = lft::StrategyStats{"ma_crossover"};
+    stats.strategy_stats["mean_reversion"] = lft::StrategyStats{"mean_reversion"};
+    stats.strategy_stats["volatility_breakout"] = lft::StrategyStats{"volatility_breakout"};
+    stats.strategy_stats["relative_strength"] = lft::StrategyStats{"relative_strength"};
+
+    // Price histories for all symbols
+    auto price_histories = std::map<std::string, lft::PriceHistory>{};
+
+    // Fetch and process historic bars for each symbol
+    std::println("Fetching historic data...\n");
+
+    // Combine all symbols for processing
+    auto all_symbols = stocks;
+    all_symbols.insert(all_symbols.end(), crypto.begin(), crypto.end());
+
+    // Map symbol to bars
+    auto symbol_bars = std::map<std::string, std::vector<lft::Bar>>{};
+
+    for (const auto& symbol : all_symbols) {
+        auto is_crypto = symbol.find('/') != std::string::npos;
+
+        std::println("Fetching {} bars...", symbol);
+
+        auto bars = is_crypto
+            ? client.get_crypto_bars(symbol, "1Min", start, end)
+            : client.get_bars(symbol, "1Min", start, end);
+
+        if (not bars) {
+            std::println("{}⚠ Failed to fetch {} bars{}", colour_yellow, symbol, colour_reset);
+            continue;
         }
 
-        std::println("{}🔬 LFT BACKTESTING ENGINE{}", colour_cyan, colour_reset);
-        std::println("Testing multi-strategy system on historic data\n");
+        std::println("  {} bars fetched", bars->size());
+        symbol_bars[symbol] = std::move(*bars);
+    }
 
-        // Same watchlist as live ticker
-        auto stocks = std::vector<std::string>{
-            "AAPL", "TSLA", "NVDA", "MSFT", "GOOGL", "AMZN", "META"};
-        auto crypto = std::vector<std::string>{
-            "BTC/USD", "ETH/USD"};
+    // Find the maximum number of bars across all symbols for iteration
+    auto max_bars = 0uz;
+    for (const auto& [sym, bars] : symbol_bars)
+        max_bars = std::max(max_bars, bars.size());
 
-        // Backtest period: last 30 days of 1-minute bars
-        auto now = std::chrono::system_clock::now();
-        auto thirty_days_ago = now - std::chrono::hours(24 * 30);
+    std::println("\nSimulating {} time periods...", max_bars);
 
-        auto start = std::format("{:%Y-%m-%dT%H:%M:%SZ}", thirty_days_ago);
-        auto end = std::format("{:%Y-%m-%dT%H:%M:%SZ}", now);
-
-        std::println("Period: {} to {}", start, end);
-        std::println("Timeframe: 1 minute bars");
-        std::println("Initial capital: $10,000\n");
-
-        // Initialise backtest stats
-        auto stats = BacktestStats{};
-        stats.strategy_stats["dip"] = lft::StrategyStats{"dip"};
-        stats.strategy_stats["ma_crossover"] = lft::StrategyStats{"ma_crossover"};
-        stats.strategy_stats["mean_reversion"] = lft::StrategyStats{"mean_reversion"};
-        stats.strategy_stats["volatility_breakout"] = lft::StrategyStats{"volatility_breakout"};
-        stats.strategy_stats["relative_strength"] = lft::StrategyStats{"relative_strength"};
-
-        // Price histories for all symbols
-        auto price_histories = std::map<std::string, lft::PriceHistory>{};
-
-        // Fetch and process historic bars for each symbol
-        std::println("Fetching historic data...\n");
-
-        // Combine all symbols for processing
-        auto all_symbols = stocks;
-        all_symbols.insert(all_symbols.end(), crypto.begin(), crypto.end());
-
-        // Map symbol to bars
-        auto symbol_bars = std::map<std::string, std::vector<lft::Bar>>{};
-
+    // Iterate through time, processing each symbol's bar at each timestamp
+    for (auto i = 0uz; i < max_bars; ++i) {
+        // Process each symbol's bar at this time index
         for (const auto& symbol : all_symbols) {
-            auto is_crypto = symbol.find('/') != std::string::npos;
-
-            std::println("Fetching {} bars...", symbol);
-
-            auto bars = is_crypto
-                ? client.get_crypto_bars(symbol, "1Min", start, end)
-                : client.get_bars(symbol, "1Min", start, end);
-
-            if (not bars) {
-                std::println("{}⚠ Failed to fetch {} bars{}", colour_yellow, symbol, colour_reset);
-                continue;
-            }
-
-            std::println("  {} bars fetched", bars->size());
-            symbol_bars[symbol] = std::move(*bars);
-        }
-
-        // Find the maximum number of bars across all symbols for iteration
-        auto max_bars = 0uz;
-        for (const auto& [sym, bars] : symbol_bars)
-            max_bars = std::max(max_bars, bars.size());
-
-        std::println("\nSimulating {} time periods...", max_bars);
-
-        // Iterate through time, processing each symbol's bar at each timestamp
-        for (auto i = 0uz; i < max_bars; ++i) {
-            // Process each symbol's bar at this time index
-            for (const auto& symbol : all_symbols) {
-                if (not symbol_bars.contains(symbol))
-                    continue;
-
-                const auto& bars = symbol_bars[symbol];
-                if (i >= bars.size())
-                    continue;
-
-                const auto& bar = bars[i];
-                auto& history = price_histories[symbol];
-
-                process_bar(symbol, bar, history, price_histories, stats);
-            }
-
-            // Progress indicator every 1000 bars
-            if ((i + 1) % 1000 == 0)
-                std::println("  Processed {} / {} periods...", i + 1, max_bars);
-        }
-
-        // Close any remaining positions at final prices
-        for (const auto& [symbol, pos] : stats.positions) {
             if (not symbol_bars.contains(symbol))
                 continue;
 
             const auto& bars = symbol_bars[symbol];
-            if (bars.empty())
+            if (i >= bars.size())
                 continue;
 
-            auto final_price = bars.back().close;
-            auto current_value = pos.quantity * final_price;
-            auto cost_basis = pos.quantity * pos.entry_price;
-            auto unrealized_pl = current_value - cost_basis;
+            const auto& bar = bars[i];
+            auto& history = price_histories[symbol];
 
-            stats.cash += current_value;
-
-            auto& strategy_stat = stats.strategy_stats[pos.strategy];
-            ++strategy_stat.trades_closed;
-
-            if (unrealized_pl > 0.0) {
-                ++strategy_stat.profitable_trades;
-                strategy_stat.total_profit += unrealized_pl;
-                ++stats.winning_trades;
-            } else {
-                ++strategy_stat.losing_trades;
-                strategy_stat.total_loss += unrealized_pl;
-                ++stats.losing_trades;
-            }
+            process_bar(symbol, bar, history, price_histories, stats);
         }
-        stats.positions.clear();
 
-        // Print results
-        print_summary(stats);
-
-    } catch (const std::exception& e) {
-        std::println("Error: {}", e.what());
-        return 1;
+        // Progress indicator every 1000 bars
+        if ((i + 1) % 1000 == 0)
+            std::println("  Processed {} / {} periods...", i + 1, max_bars);
     }
+
+    // Close any remaining positions at final prices
+    for (const auto& [symbol, pos] : stats.positions) {
+        if (not symbol_bars.contains(symbol))
+            continue;
+
+        const auto& bars = symbol_bars[symbol];
+        if (bars.empty())
+            continue;
+
+        auto final_price = bars.back().close;
+        auto current_value = pos.quantity * final_price;
+        auto cost_basis = pos.quantity * pos.entry_price;
+        auto unrealized_pl = current_value - cost_basis;
+
+        stats.cash += current_value;
+
+        auto& strategy_stat = stats.strategy_stats[pos.strategy];
+        ++strategy_stat.trades_closed;
+
+        if (unrealized_pl > 0.0) {
+            ++strategy_stat.profitable_trades;
+            strategy_stat.total_profit += unrealized_pl;
+            ++stats.winning_trades;
+        } else {
+            ++strategy_stat.losing_trades;
+            strategy_stat.total_loss += unrealized_pl;
+            ++stats.losing_trades;
+        }
+    }
+    stats.positions.clear();
+
+    // Print results
+    print_summary(stats);
 
     return 0;
 }
