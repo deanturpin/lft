@@ -317,31 +317,22 @@ std::expected<std::vector<Bar>, AlpacaError> AlpacaClient::get_bars(
     std::string_view start,
     std::string_view end) {
 
-    std::println(stderr, "get_bars called for {} ({})", symbol, timeframe);
-    std::println(stderr, "  data_url: {}", data_url_);
-
     auto client = httplib::Client{data_url_};
     client.set_connection_timeout(30);
 
     // Build request path for stock bars
     auto path = std::format("/v2/stocks/{}/bars?timeframe={}&start={}&end={}&limit=10000",
                            symbol, timeframe, start, end);
-    std::println(stderr, "  path: {}", path);
 
     httplib::Headers headers = {
         {"APCA-API-KEY-ID", api_key_},
         {"APCA-API-SECRET-KEY", api_secret_}
     };
 
-    std::println(stderr, "  Making GET request...");
     auto res = client.Get(path, headers);
 
-    if (not res) {
-        std::println(stderr, "  Network error - no response");
+    if (not res)
         return std::unexpected(AlpacaError::NetworkError);
-    }
-
-    std::println(stderr, "  Got response: status={}", res->status);
 
     if (res->status == 401)
         return std::unexpected(AlpacaError::AuthError);
@@ -349,25 +340,17 @@ std::expected<std::vector<Bar>, AlpacaError> AlpacaClient::get_bars(
     if (res->status == 404)
         return std::unexpected(AlpacaError::InvalidSymbol);
 
-    if (res->status != 200) {
-        std::println(stderr, "API error: status={}, body={}", res->status, res->body);
+    if (res->status != 200)
         return std::unexpected(AlpacaError::UnknownError);
-    }
 
-    // Parse bars from response - first print for debug
-    std::println(stderr, "get_bars response body: {}", res->body.substr(0, 500));
-
+    // Parse bars from response
     auto data_result = json::parse(res->body, nullptr, false);
-    if (data_result.is_discarded()) {
-        std::println(stderr, "JSON parse failed");
+    if (data_result.is_discarded())
         return std::unexpected(AlpacaError::ParseError);
-    }
 
     auto bars = std::vector<Bar>{};
-    if (not data_result.contains("bars")) {
-        std::println(stderr, "No 'bars' field in response");
+    if (not data_result.contains("bars"))
         return bars;
-    }
 
     for (const auto& bar_json : data_result["bars"]) {
         auto bar = Bar{};
@@ -401,15 +384,10 @@ std::expected<std::vector<Bar>, AlpacaError> AlpacaClient::get_crypto_bars(
         {"APCA-API-SECRET-KEY", api_secret_}
     };
 
-    std::println(stderr, "  Making GET request...");
     auto res = client.Get(path, headers);
 
-    if (not res) {
-        std::println(stderr, "  Network error - no response");
+    if (not res)
         return std::unexpected(AlpacaError::NetworkError);
-    }
-
-    std::println(stderr, "  Got response: status={}", res->status);
 
     if (res->status == 401)
         return std::unexpected(AlpacaError::AuthError);
@@ -417,34 +395,30 @@ std::expected<std::vector<Bar>, AlpacaError> AlpacaClient::get_crypto_bars(
     if (res->status == 404)
         return std::unexpected(AlpacaError::InvalidSymbol);
 
-    if (res->status != 200) {
-        std::println(stderr, "API error: status={}, body={}", res->status, res->body);
+    if (res->status != 200)
         return std::unexpected(AlpacaError::UnknownError);
-    }
 
     // Parse bars from response
-    try {
-        auto data = json::parse(res->body);
-        auto bars = std::vector<Bar>{};
-
-        if (not data.contains("bars") or not data["bars"].contains(std::string{symbol}))
-            return bars;
-
-        for (const auto& bar_json : data["bars"][std::string{symbol}]) {
-            auto bar = Bar{};
-            bar.timestamp = bar_json["t"].get<std::string>();
-            bar.open = bar_json["o"].get<double>();
-            bar.high = bar_json["h"].get<double>();
-            bar.low = bar_json["l"].get<double>();
-            bar.close = bar_json["c"].get<double>();
-            bar.volume = bar_json["v"].get<long>();
-            bars.push_back(bar);
-        }
-
-        return bars;
-    } catch (...) {
+    auto data_result = json::parse(res->body, nullptr, false);
+    if (data_result.is_discarded())
         return std::unexpected(AlpacaError::ParseError);
+
+    auto bars = std::vector<Bar>{};
+    if (not data_result.contains("bars") or not data_result["bars"].contains(std::string{symbol}))
+        return bars;
+
+    for (const auto& bar_json : data_result["bars"][std::string{symbol}]) {
+        auto bar = Bar{};
+        bar.timestamp = bar_json["t"].get<std::string>();
+        bar.open = bar_json["o"].get<double>();
+        bar.high = bar_json["h"].get<double>();
+        bar.low = bar_json["l"].get<double>();
+        bar.close = bar_json["c"].get<double>();
+        bar.volume = bar_json["v"].get<long>();
+        bars.push_back(bar);
     }
+
+    return bars;
 }
 
 } // namespace lft
