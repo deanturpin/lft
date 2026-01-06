@@ -201,7 +201,8 @@ int main() {
   // Same watchlist as live ticker
   auto stocks = std::vector<std::string>{"AAPL",  "TSLA", "NVDA", "MSFT",
                                          "GOOGL", "AMZN", "META"};
-  auto crypto = std::vector<std::string>{"BTC/USD", "ETH/USD"};
+  auto crypto =
+      std::vector<std::string>{"BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD"};
 
   // Backtest period: last 30 days of 1-minute bars
   auto now = std::chrono::system_clock::now();
