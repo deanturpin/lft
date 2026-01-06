@@ -140,16 +140,6 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
       if (signal.should_buy) {
         ++stats.strategy_stats[signal.strategy_name].signals_generated;
 
-        // Debug: print first signal details
-        static auto first_signal_printed = false;
-        if (not first_signal_printed) {
-          std::println("  DEBUG: First signal - cash=${:.2f}, "
-                       "notional=${:.2f}, has_position={}",
-                       stats.cash, notional_amount,
-                       stats.positions.contains(symbol));
-          first_signal_printed = true;
-        }
-
         // Execute if we have cash
         if (stats.cash >= notional_amount) {
 
@@ -780,11 +770,10 @@ int main() {
   std::println("{}🤖 LFT - LOW FREQUENCY TRADER{}", colour_cyan, colour_reset);
   std::println("Calibrate → Execute Workflow\n");
 
-  // Start with just one asset for debugging
   // Same watchlist as live ticker
   auto stocks = std::vector<std::string>{"AAPL",  "TSLA", "NVDA", "MSFT",
                                          "GOOGL", "AMZN", "META"};
-  auto crypto = std::vector<std::string>{"BTC/USD", "ETH/USD"};
+  auto crypto = std::vector<std::string>{"BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD"};
 
   // Phase 1: Calibrate
   auto configs = calibrate_all_strategies(client, stocks, crypto);
