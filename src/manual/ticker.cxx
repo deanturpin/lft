@@ -24,9 +24,17 @@ constexpr auto colour_cyan = "\033[36m";
 constexpr auto alert_threshold = 2.0;   // Alert on >2% change
 constexpr auto dip_threshold = -0.2;    // Buy on >0.2% drop
 constexpr auto notional_amount = 100.0; // Buy $100 worth
+constexpr auto take_profit_threshold = 1.0;    // Minimum $1 profit
+constexpr auto stop_loss_amount = -5.0;        // -$5 loss
+constexpr auto take_profit_pct = 0.01;         // 1% profit
+constexpr auto stop_loss_pct = -0.05;          // -5% loss
+constexpr auto trailing_stop_pct = 0.02;       // Trail by 2% from peak
 
 // Track which strategy opened each position
 std::map<std::string, std::string> position_strategies;
+
+// Track peak prices for trailing stops
+std::map<std::string, double> position_peaks;
 
 // Strategy performance tracking
 std::map<std::string, lft::StrategyStats> strategy_stats;
@@ -199,25 +207,58 @@ int main(int argc, char *argv[]) {
             }
             std::println("");
 
-            // Take profit: close positions that are actually profitable
+            // Evaluate exit conditions with multiple strategies
             if (strategies_enabled) {
               for (const auto &pos : positions_json) {
                 auto symbol = pos["symbol"].get<std::string>();
                 auto unrealized_pl =
                     std::stod(pos["unrealized_pl"].get<std::string>());
+                auto cost_basis =
+                    std::stod(pos["cost_basis"].get<std::string>());
+                auto current_price =
+                    std::stod(pos["current_price"].get<std::string>());
+                auto avg_entry =
+                    std::stod(pos["avg_entry_price"].get<std::string>());
+                auto pl_pct = (current_price - avg_entry) / avg_entry;
 
-                // Close if profitable
-                if (unrealized_pl > 0.0) {
-                  auto cost_basis =
-                      std::stod(pos["cost_basis"].get<std::string>());
+                // Update peak price for trailing stop
+                if (not position_peaks.contains(symbol))
+                  position_peaks[symbol] = current_price;
+                else if (current_price > position_peaks[symbol])
+                  position_peaks[symbol] = current_price;
+
+                // Calculate trailing stop trigger
+                auto peak = position_peaks[symbol];
+                auto trailing_stop_price = peak * (1.0 + trailing_stop_pct);
+                auto trailing_stop_triggered = current_price < trailing_stop_price;
+
+                // Exit conditions: dollar-based OR percentage-based OR trailing stop
+                auto should_exit =
+                    unrealized_pl >= take_profit_threshold or   // Dollar profit
+                    pl_pct >= take_profit_pct or                // Percentage profit
+                    unrealized_pl <= stop_loss_amount or        // Dollar stop loss
+                    pl_pct <= stop_loss_pct or                  // Percentage stop loss
+                    trailing_stop_triggered;                    // Trailing stop
+
+                if (should_exit) {
                   auto profit_percent = (unrealized_pl / cost_basis) * 100.0;
                   auto strategy = position_strategies.contains(symbol)
                                       ? position_strategies[symbol]
                                       : "manual";
 
+                  // Determine exit reason
+                  auto exit_reason = std::string{};
+                  if (trailing_stop_triggered)
+                    exit_reason = "TRAILING STOP";
+                  else if (unrealized_pl > 0.0)
+                    exit_reason = "PROFIT TARGET";
+                  else
+                    exit_reason = "STOP LOSS";
+
                   std::println(
-                      "💰 PROFIT DETECTED: {} profit ${:.2f} ({:.2f}%) from {}",
-                      symbol, unrealized_pl, profit_percent, strategy);
+                      "{} {}: {} ${:.2f} ({:.2f}%) from {}",
+                      unrealized_pl > 0.0 ? "💰" : "🛑",
+                      exit_reason, symbol, unrealized_pl, profit_percent, strategy);
                   std::println("   Closing position...");
 
                   auto close_result = client.close_position(symbol);
@@ -228,40 +269,19 @@ int main(int argc, char *argv[]) {
                     // Update strategy stats
                     if (strategy_stats.contains(strategy)) {
                       ++strategy_stats[strategy].trades_closed;
-                      ++strategy_stats[strategy].profitable_trades;
-                      strategy_stats[strategy].total_profit += unrealized_pl;
+                      if (unrealized_pl > 0.0) {
+                        ++strategy_stats[strategy].profitable_trades;
+                        strategy_stats[strategy].total_profit += unrealized_pl;
+                      } else {
+                        ++strategy_stats[strategy].losing_trades;
+                        strategy_stats[strategy].total_loss += unrealized_pl;
+                      }
                     }
 
                     position_strategies.erase(symbol);
+                    position_peaks.erase(symbol);
                   } else {
                     std::println("❌ Failed to close position: {}", symbol);
-                  }
-                } else if (unrealized_pl < -10.0) {
-                  // Stop loss at -$10
-                  auto strategy = position_strategies.contains(symbol)
-                                      ? position_strategies[symbol]
-                                      : "manual";
-                  auto cost_basis =
-                      std::stod(pos["cost_basis"].get<std::string>());
-                  auto loss_percent = (unrealized_pl / cost_basis) * 100.0;
-
-                  std::println(
-                      "🛑 STOP LOSS: {} loss ${:.2f} ({:.2f}%) from {}", symbol,
-                      unrealized_pl, loss_percent, strategy);
-
-                  auto close_result = client.close_position(symbol);
-                  if (close_result) {
-                    std::println("✅ Position closed: {}", symbol);
-                    existing_positions.erase(symbol);
-
-                    // Update strategy stats
-                    if (strategy_stats.contains(strategy)) {
-                      ++strategy_stats[strategy].trades_closed;
-                      ++strategy_stats[strategy].losing_trades;
-                      strategy_stats[strategy].total_loss += unrealized_pl;
-                    }
-
-                    position_strategies.erase(symbol);
                   }
                 }
               }

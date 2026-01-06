@@ -44,6 +44,10 @@ add_library(strategies STATIC
 )
 target_link_libraries(strategies PUBLIC alpaca_client)
 
+# Unified calibrate-and-execute executable
+add_executable(lft src/lft.cxx)
+target_link_libraries(lft PRIVATE alpaca_client strategies)
+
 # Manual ticker executable
 add_executable(ticker src/manual/ticker.cxx)
 target_link_libraries(ticker PRIVATE alpaca_client strategies)

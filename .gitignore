@@ -7,9 +7,11 @@ cmake-build-*/
 *.dylib
 
 # Executables (in root/build only, not src/)
+/lft
 /ticker
 /backtest
 /auto-trader
+build/lft
 build/ticker
 build/backtest
 build/auto-trader

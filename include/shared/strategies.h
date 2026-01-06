@@ -15,6 +15,17 @@ struct StrategySignal {
     std::string strategy_name;
 };
 
+// Strategy-specific exit configuration
+struct StrategyConfig {
+    std::string name;
+    bool enabled{false};
+    double take_profit_pct{};
+    double stop_loss_pct{};
+    double trailing_stop_pct{};
+    double net_profit{};  // From calibration
+    double win_rate{};    // From calibration
+};
+
 // Performance tracking for each strategy
 struct StrategyStats {
     std::string name;
