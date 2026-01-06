@@ -27,6 +27,15 @@ struct Snapshot {
     std::string latest_trade_timestamp;
 };
 
+struct Bar {
+    std::string timestamp;
+    double open{};
+    double high{};
+    double low{};
+    double close{};
+    long volume{};
+};
+
 enum class AlpacaError {
     NetworkError,
     AuthError,
@@ -62,6 +71,12 @@ public:
 
     // Close a position by symbol
     std::expected<std::string, AlpacaError> close_position(std::string_view);
+
+    // Get historic bars (timeframe: "1Min", "1Hour", "1Day", etc.)
+    std::expected<std::vector<Bar>, AlpacaError> get_bars(std::string_view, std::string_view, std::string_view, std::string_view);
+
+    // Get historic crypto bars
+    std::expected<std::vector<Bar>, AlpacaError> get_crypto_bars(std::string_view, std::string_view, std::string_view, std::string_view);
 
 private:
     std::string api_key_;

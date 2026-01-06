@@ -28,10 +28,10 @@ AlpacaClient::get_snapshots(const std::vector<std::string>& symbols) {
 
     // Build comma-separated symbol list
     auto symbol_list = std::string{};
-    for (auto [i, sym] : std::views::enumerate(symbols)) {
+    for (auto i = 0uz; i < symbols.size(); ++i) {
         if (i > 0)
             symbol_list += ",";
-        symbol_list += sym;
+        symbol_list += symbols[i];
     }
 
     // Create HTTPS client for market data API
@@ -101,10 +101,10 @@ AlpacaClient::get_crypto_snapshots(const std::vector<std::string>& symbols) {
 
     // Build comma-separated symbol list
     auto symbol_list = std::string{};
-    for (auto [i, sym] : std::views::enumerate(symbols)) {
+    for (auto i = 0uz; i < symbols.size(); ++i) {
         if (i > 0)
             symbol_list += ",";
-        symbol_list += sym;
+        symbol_list += symbols[i];
     }
 
     // Create HTTPS client for market data API
@@ -295,6 +295,120 @@ std::expected<std::string, AlpacaError> AlpacaClient::close_position(std::string
     }
 
     return res->body;
+}
+
+std::expected<std::vector<Bar>, AlpacaError> AlpacaClient::get_bars(
+    std::string_view symbol,
+    std::string_view timeframe,
+    std::string_view start,
+    std::string_view end) {
+
+    auto client = httplib::Client{data_url_};
+    client.set_connection_timeout(30);
+
+    // Build request path for stock bars
+    auto path = std::format("/v2/stocks/{}/bars?timeframe={}&start={}&end={}&limit=10000",
+                           symbol, timeframe, start, end);
+
+    httplib::Headers headers = {
+        {"APCA-API-KEY-ID", api_key_},
+        {"APCA-API-SECRET-KEY", api_secret_}
+    };
+
+    auto res = client.Get(path, headers);
+
+    if (not res)
+        return std::unexpected(AlpacaError::NetworkError);
+
+    if (res->status == 401)
+        return std::unexpected(AlpacaError::AuthError);
+
+    if (res->status == 404)
+        return std::unexpected(AlpacaError::InvalidSymbol);
+
+    if (res->status != 200)
+        return std::unexpected(AlpacaError::UnknownError);
+
+    // Parse bars from response
+    try {
+        auto data = json::parse(res->body);
+        auto bars = std::vector<Bar>{};
+
+        if (not data.contains("bars"))
+            return bars;
+
+        for (const auto& bar_json : data["bars"]) {
+            auto bar = Bar{};
+            bar.timestamp = bar_json["t"].get<std::string>();
+            bar.open = bar_json["o"].get<double>();
+            bar.high = bar_json["h"].get<double>();
+            bar.low = bar_json["l"].get<double>();
+            bar.close = bar_json["c"].get<double>();
+            bar.volume = bar_json["v"].get<long>();
+            bars.push_back(bar);
+        }
+
+        return bars;
+    } catch (...) {
+        return std::unexpected(AlpacaError::ParseError);
+    }
+}
+
+std::expected<std::vector<Bar>, AlpacaError> AlpacaClient::get_crypto_bars(
+    std::string_view symbol,
+    std::string_view timeframe,
+    std::string_view start,
+    std::string_view end) {
+
+    auto client = httplib::Client{data_url_};
+    client.set_connection_timeout(30);
+
+    // Build request path for crypto bars
+    auto path = std::format("/v1beta3/crypto/us/bars?symbols={}&timeframe={}&start={}&end={}&limit=10000",
+                           symbol, timeframe, start, end);
+
+    httplib::Headers headers = {
+        {"APCA-API-KEY-ID", api_key_},
+        {"APCA-API-SECRET-KEY", api_secret_}
+    };
+
+    auto res = client.Get(path, headers);
+
+    if (not res)
+        return std::unexpected(AlpacaError::NetworkError);
+
+    if (res->status == 401)
+        return std::unexpected(AlpacaError::AuthError);
+
+    if (res->status == 404)
+        return std::unexpected(AlpacaError::InvalidSymbol);
+
+    if (res->status != 200)
+        return std::unexpected(AlpacaError::UnknownError);
+
+    // Parse bars from response
+    try {
+        auto data = json::parse(res->body);
+        auto bars = std::vector<Bar>{};
+
+        if (not data.contains("bars") or not data["bars"].contains(std::string{symbol}))
+            return bars;
+
+        for (const auto& bar_json : data["bars"][std::string{symbol}]) {
+            auto bar = Bar{};
+            bar.timestamp = bar_json["t"].get<std::string>();
+            bar.open = bar_json["o"].get<double>();
+            bar.high = bar_json["h"].get<double>();
+            bar.low = bar_json["l"].get<double>();
+            bar.close = bar_json["c"].get<double>();
+            bar.volume = bar_json["v"].get<long>();
+            bars.push_back(bar);
+        }
+
+        return bars;
+    } catch (...) {
+        return std::unexpected(AlpacaError::ParseError);
+    }
 }
 
 } // namespace lft

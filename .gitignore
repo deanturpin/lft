@@ -6,10 +6,13 @@ cmake-build-*/
 *.so
 *.dylib
 
-# Executables
-ticker
-backtest
-auto-trader
+# Executables (in root/build only, not src/)
+/ticker
+/backtest
+/auto-trader
+build/ticker
+build/backtest
+build/auto-trader
 
 # IDE
 .vscode/
@@ -30,3 +33,4 @@ _deps/
 
 VPS_DEPLOYMENT.md
 Dockerfile
+docker-compose.yml

@@ -1,36 +1,67 @@
 # LFT - Low Frequency Trader
 
-A C++23-based algorithmic trading system for US stocks and ETFs.
+A C++23 multi-strategy automated trading system for US stocks and crypto.
 
-## Project Goals
+## Features
 
-Build a systematic trading system in three phases:
+**Multi-Strategy Framework**
+- 5 concurrent trading strategies evaluated each interval
+- Per-strategy performance tracking with win rate and P&L metrics
+- Unified position management with automated profit-taking and stop-loss
+- Support for 9 stocks and 4 crypto assets
 
-1. **Manual Trading** - Execute individual trades to understand the API and broker mechanics
-2. **Backtesting** - Develop and validate strategies using historical data
-3. **Automated Trading** - Deploy proven strategies to production
+**Trading Strategies**
+1. **Dip Buying** - Entry on 0.2% price drops
+2. **MA Crossover** - 5-period crosses 20-period moving average
+3. **Mean Reversion** - Price >2 standard deviations below MA
+4. **Volatility Breakout** - Expansion from compression with volume
+5. **Relative Strength** - Outperformance vs market basket by >0.5%
 
-## Tech Stack (In Progress)
+**Components**
+- **ticker** - Live trading loop with real-time market data (60s polling)
+- **backtest** - Historic strategy validation on 1-minute bars
+- **positions** - Current position viewer
 
-**Core:**
-- Language: C++23
-- Target: US stocks and ETFs
-- Trading API: Alpaca Markets (provides both trading and historical data)
+## Quick Start
 
-**Deployment:**
-- Fasthosts VPS (similar to existing idapp deployment)
+```bash
+# Configure API credentials
+cp .env.example .env
+# Edit .env with your Alpaca API keys
 
-**To Be Decided:**
-- Web dashboard: Pure C++ HTTP server vs Node.js/TypeScript (leveraging existing expertise)
-- Data storage: PostgreSQL/TimescaleDB vs file-based
-- C++ libraries: HTTP client, JSON parser, WebSocket support
-- Build system: CMake setup and dependencies
+# Build and run live ticker (paper trading)
+source .env
+make build
+make run
 
-## Data Requirements
+# Run backtesting on historic data
+make backtest
+```
 
-- Historical market data for backtesting (Alpaca Data API v2)
-- Live market data for automated trading (REST and/or WebSocket)
+## Tech Stack
 
-## Development Status
+- **Language:** C++23 (std::expected, std::ranges, std::println)
+- **API:** Alpaca Markets (paper and live trading)
+- **Build:** CMake + Make
+- **Dependencies:** cpp-httplib, nlohmann/json (via FetchContent)
 
-Currently exploring tech stack options and API capabilities.
+## Project Structure
+
+```
+src/
+  manual/       - Live trading applications
+    ticker.cxx    - Multi-strategy trading loop
+    positions.cxx - Position viewer
+  backtest/     - Historic validation
+    backtest.cxx  - Strategy backtesting engine
+  shared/       - Common libraries
+    alpaca_client.cxx - API integration
+    strategies.cxx    - Trading strategies
+```
+
+## Development Roadmap
+
+- [x] Phase 1: Manual trading with Alpaca API integration
+- [x] Phase 2: Backtesting framework with historic data
+- [ ] Phase 3: Production deployment to VPS
+- [ ] Phase 4: Real-time monitoring dashboard

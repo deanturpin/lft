@@ -52,6 +52,10 @@ target_link_libraries(ticker PRIVATE alpaca_client strategies)
 add_executable(positions src/manual/positions.cxx)
 target_link_libraries(positions PRIVATE alpaca_client)
 
+# Backtest executable
+add_executable(backtest src/backtest/backtest.cxx)
+target_link_libraries(backtest PRIVATE alpaca_client strategies)
+
 # Enable testing
 enable_testing()
 add_subdirectory(tests)

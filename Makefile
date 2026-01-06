@@ -1,4 +1,4 @@
-.PHONY: all build run clean test
+.PHONY: all build run backtest clean test
 
 # Default target: build and run ticker
 all: build run
@@ -11,6 +11,10 @@ build:
 # Run the ticker with multi-strategy trading
 run:
 	@./build/ticker --strategies
+
+# Run backtesting
+backtest: build
+	@./build/backtest
 
 # Clean build artifacts
 clean:
