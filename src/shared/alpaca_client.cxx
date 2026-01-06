@@ -15,6 +15,8 @@ AlpacaClient::AlpacaClient()
     , api_secret_{get_env_or_default("ALPACA_API_SECRET", "")}
     , base_url_{get_env_or_default("ALPACA_BASE_URL", "https://paper-api.alpaca.markets")}
     , data_url_{get_env_or_default("ALPACA_DATA_URL", "https://data.alpaca.markets")}
+    , data_api_key_{get_env_or_default("ALPACA_DATA_API_KEY", api_key_)}
+    , data_api_secret_{get_env_or_default("ALPACA_DATA_API_SECRET", api_secret_)}
 {}
 
 std::string AlpacaClient::get_env_or_default(std::string_view name, std::string_view default_val) {
@@ -325,8 +327,8 @@ std::expected<std::vector<Bar>, AlpacaError> AlpacaClient::get_bars(
                            symbol, timeframe, start, end);
 
     httplib::Headers headers = {
-        {"APCA-API-KEY-ID", api_key_},
-        {"APCA-API-SECRET-KEY", api_secret_}
+        {"APCA-API-KEY-ID", data_api_key_},
+        {"APCA-API-SECRET-KEY", data_api_secret_}
     };
 
     auto res = client.Get(path, headers);
@@ -380,8 +382,8 @@ std::expected<std::vector<Bar>, AlpacaError> AlpacaClient::get_crypto_bars(
                            symbol, timeframe, start, end);
 
     httplib::Headers headers = {
-        {"APCA-API-KEY-ID", api_key_},
-        {"APCA-API-SECRET-KEY", api_secret_}
+        {"APCA-API-KEY-ID", data_api_key_},
+        {"APCA-API-SECRET-KEY", data_api_secret_}
     };
 
     auto res = client.Get(path, headers);

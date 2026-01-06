@@ -83,6 +83,8 @@ private:
     std::string api_secret_;
     std::string base_url_;
     std::string data_url_;
+    std::string data_api_key_;
+    std::string data_api_secret_;
 
     std::string get_env_or_default(std::string_view, std::string_view);
 };
