@@ -1,0 +1,32 @@
+# Build artifacts
+build/
+cmake-build-*/
+*.o
+*.a
+*.so
+*.dylib
+
+# Executables
+ticker
+backtest
+auto-trader
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Environment
+.env
+*.local
+
+# Dependencies
+_deps/
+
+VPS_DEPLOYMENT.md
+Dockerfile
