@@ -32,8 +32,8 @@ constexpr auto dip_threshold = -2_pc;
 constexpr auto notional_amount = 100.0;
 
 // Spread simulation (buy at ask, sell at bid)
-constexpr auto stock_spread_bps = 0.02_pc;  // 2 basis points = 0.02%
-constexpr auto crypto_spread_bps = 0.1_pc;  // 10 basis points = 0.1%
+constexpr auto stock_spread = 2.0 / 10000.0;   // 2 basis points = 0.02%
+constexpr auto crypto_spread = 10.0 / 10000.0; // 10 basis points = 0.1%
 
 // Calibration parameters
 constexpr auto calibration_days = 30; // Use last 30 days for better calibration
@@ -58,7 +58,7 @@ struct Position {
 
 struct BacktestStats {
   std::map<std::string, lft::StrategyStats> strategy_stats;
-  double cash{10000.0}; // Starting capital
+  double cash{100000.0}; // Starting capital
   std::map<std::string, Position> positions;
   int total_trades{};
   int winning_trades{};
@@ -80,8 +80,8 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
 
     // Apply spread: sell at bid (mid - half spread)
     auto is_crypto = symbol.find('/') != std::string::npos;
-    auto spread_bps = is_crypto ? crypto_spread_bps : stock_spread_bps;
-    auto half_spread = bar.close * (spread_bps / 2.0);
+    auto spread = is_crypto ? crypto_spread : stock_spread;
+    auto half_spread = bar.close * (spread / 2.0);
     auto sell_price = bar.close - half_spread;
 
     auto current_value = pos.quantity * sell_price;
@@ -146,8 +146,8 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
 
           // Apply spread: buy at ask (mid + half spread)
           auto is_crypto = symbol.find('/') != std::string::npos;
-          auto spread_bps = is_crypto ? crypto_spread_bps : stock_spread_bps;
-          auto half_spread = bar.close * (spread_bps / 2.0);
+          auto spread = is_crypto ? crypto_spread : stock_spread;
+          auto half_spread = bar.close * (spread / 2.0);
           auto buy_price = bar.close + half_spread;
 
           auto quantity = notional_amount / buy_price;
@@ -222,9 +222,9 @@ BacktestStats run_backtest_with_data(
 
     // Apply spread when closing final positions
     auto is_crypto = symbol.find('/') != std::string::npos;
-    auto spread_bps = is_crypto ? crypto_spread_bps : stock_spread_bps;
+    auto spread = is_crypto ? crypto_spread : stock_spread;
     auto final_mid = bars.back().close;
-    auto half_spread = final_mid * (spread_bps / 2.0);
+    auto half_spread = final_mid * (spread / 2.0);
     auto final_sell_price = final_mid - half_spread;
 
     auto current_value = pos.quantity * final_sell_price;
