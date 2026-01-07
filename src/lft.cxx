@@ -461,14 +461,17 @@ struct MarketStatus {
 MarketStatus get_market_status(const std::chrono::system_clock::time_point &now) {
   // Convert to time_t for easier manipulation
   auto now_t = std::chrono::system_clock::to_time_t(now);
-  auto et_time = std::gmtime(&now_t); // Use GMT, will adjust manually for ET
+  auto utc_time = std::gmtime(&now_t);
 
-  // US Eastern Time is UTC-5 (EST) or UTC-4 (EDT)
-  // For simplicity, assume EDT (UTC-4) year-round
-  // Note: Proper implementation should handle DST transitions
-  auto et_hour = (et_time->tm_hour - 4 + 24) % 24;
-  auto et_min = et_time->tm_min;
-  auto weekday = et_time->tm_wday; // 0=Sunday, 6=Saturday
+  // US Eastern Time: UTC-5 (EST, Nov-Mar) or UTC-4 (EDT, Mar-Nov)
+  // Simple DST check: EDT roughly Mar-Nov (months 3-10)
+  auto month = utc_time->tm_mon; // 0=Jan, 11=Dec
+  auto is_dst = (month >= 2 and month <= 9); // Mar-Oct (EDT)
+  auto utc_offset = is_dst ? 4 : 5; // EDT or EST
+
+  auto et_hour = (utc_time->tm_hour - utc_offset + 24) % 24;
+  auto et_min = utc_time->tm_min;
+  auto weekday = utc_time->tm_wday; // 0=Sunday, 6=Saturday
 
   // Market closed on weekends
   if (weekday == 0 or weekday == 6)
