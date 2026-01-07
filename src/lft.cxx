@@ -602,23 +602,23 @@ void run_live_trading(
           print_snapshot(symbol, snap, history);
 
           // Entry logic - only for enabled strategies
+          auto signals = std::vector<lft::StrategySignal>{
+              lft::Strategies::evaluate_dip(history, dip_threshold),
+              lft::Strategies::evaluate_ma_crossover(history),
+              lft::Strategies::evaluate_mean_reversion(history),
+              lft::Strategies::evaluate_volatility_breakout(history),
+              lft::Strategies::evaluate_relative_strength(history,
+                                                          price_histories)};
+
+          // Count signals
+          for (const auto &signal : signals) {
+            if (signal.should_buy and
+                configs.contains(signal.strategy_name) and
+                configs.at(signal.strategy_name).enabled)
+              ++strategy_stats[signal.strategy_name].signals_generated;
+          }
+
           if (not existing_positions.contains(symbol)) {
-            auto signals = std::vector<lft::StrategySignal>{
-                lft::Strategies::evaluate_dip(history, dip_threshold),
-                lft::Strategies::evaluate_ma_crossover(history),
-                lft::Strategies::evaluate_mean_reversion(history),
-                lft::Strategies::evaluate_volatility_breakout(history),
-                lft::Strategies::evaluate_relative_strength(history,
-                                                            price_histories)};
-
-            // Count signals
-            for (const auto &signal : signals) {
-              if (signal.should_buy and
-                  configs.contains(signal.strategy_name) and
-                  configs.at(signal.strategy_name).enabled)
-                ++strategy_stats[signal.strategy_name].signals_generated;
-            }
-
             // Execute first enabled signal
             for (const auto &signal : signals) {
               if (signal.should_buy and
@@ -642,6 +642,17 @@ void run_live_trading(
                 }
 
                 break; // One strategy per symbol
+              }
+            }
+          } else {
+            // Check if blocked by existing position
+            for (const auto &signal : signals) {
+              if (signal.should_buy and
+                  configs.contains(signal.strategy_name) and
+                  configs.at(signal.strategy_name).enabled) {
+                std::println("{}⏸  BLOCKED: {} signal for {} (position already open){}",
+                             colour_yellow, signal.strategy_name, symbol, colour_reset);
+                break;
               }
             }
           }
@@ -659,23 +670,23 @@ void run_live_trading(
           print_snapshot(symbol, snap, history);
 
           // Entry logic - only for enabled strategies
+          auto signals = std::vector<lft::StrategySignal>{
+              lft::Strategies::evaluate_dip(history, dip_threshold),
+              lft::Strategies::evaluate_ma_crossover(history),
+              lft::Strategies::evaluate_mean_reversion(history),
+              lft::Strategies::evaluate_volatility_breakout(history),
+              lft::Strategies::evaluate_relative_strength(history,
+                                                          price_histories)};
+
+          // Count signals
+          for (const auto &signal : signals) {
+            if (signal.should_buy and
+                configs.contains(signal.strategy_name) and
+                configs.at(signal.strategy_name).enabled)
+              ++strategy_stats[signal.strategy_name].signals_generated;
+          }
+
           if (not existing_positions.contains(symbol)) {
-            auto signals = std::vector<lft::StrategySignal>{
-                lft::Strategies::evaluate_dip(history, dip_threshold),
-                lft::Strategies::evaluate_ma_crossover(history),
-                lft::Strategies::evaluate_mean_reversion(history),
-                lft::Strategies::evaluate_volatility_breakout(history),
-                lft::Strategies::evaluate_relative_strength(history,
-                                                            price_histories)};
-
-            // Count signals
-            for (const auto &signal : signals) {
-              if (signal.should_buy and
-                  configs.contains(signal.strategy_name) and
-                  configs.at(signal.strategy_name).enabled)
-                ++strategy_stats[signal.strategy_name].signals_generated;
-            }
-
             // Execute first enabled signal
             for (const auto &signal : signals) {
               if (signal.should_buy and
@@ -701,6 +712,17 @@ void run_live_trading(
                 break; // One strategy per symbol
               }
             }
+          } else {
+            // Check if blocked by existing position
+            for (const auto &signal : signals) {
+              if (signal.should_buy and
+                  configs.contains(signal.strategy_name) and
+                  configs.at(signal.strategy_name).enabled) {
+                std::println("{}⏸  BLOCKED: {} signal for {} (position already open){}",
+                             colour_yellow, signal.strategy_name, symbol, colour_reset);
+                break;
+              }
+            }
           }
         }
       }
@@ -709,7 +731,12 @@ void run_live_trading(
     // Print stats
     print_strategy_stats(strategy_stats);
 
-    std::println("\n⏳ Next update in 60 seconds...\n");
+    // Calculate time remaining
+    auto time_left = end_time - std::chrono::system_clock::now();
+    auto minutes_remaining = std::chrono::duration_cast<std::chrono::minutes>(time_left).count();
+
+    std::println("\n⏳ Next update in 60 seconds | {} minutes until re-calibration\n",
+                 minutes_remaining);
     std::this_thread::sleep_for(60s);
   }
 }
