@@ -452,6 +452,38 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
                colour_reset);
 }
 
+void print_account_stats(lft::AlpacaClient &client) {
+  auto account_result = client.get_account();
+  if (not account_result)
+    return;
+
+  auto account_json = nlohmann::json::parse(account_result.value(), nullptr, false);
+  if (account_json.is_discarded())
+    return;
+
+  auto cash = std::stod(account_json["cash"].get<std::string>());
+  auto buying_power = std::stod(account_json["buying_power"].get<std::string>());
+  auto equity = std::stod(account_json["equity"].get<std::string>());
+  auto portfolio_value = std::stod(account_json["portfolio_value"].get<std::string>());
+
+  std::println("\n💰 ACCOUNT STATUS");
+  std::println("{:-<70}", "");
+  std::println("Cash:          ${:>12.2f}", cash);
+  std::println("Equity:        ${:>12.2f}", equity);
+  std::println("Portfolio:     ${:>12.2f}", portfolio_value);
+  std::println("Buying Power:  ${:>12.2f}", buying_power);
+
+  // Warn if low balance
+  if (cash < notional_amount) {
+    std::println("{}⚠  WARNING: Cash (${:.2f}) below trade size (${:.2f}){}",
+                 colour_yellow, cash, notional_amount, colour_reset);
+  }
+  if (cash <= 0.0) {
+    std::println("{}❌ CRITICAL: Zero balance - cannot place new trades{}",
+                 colour_red, colour_reset);
+  }
+}
+
 void print_strategy_stats(
     const std::map<std::string, lft::StrategyStats> &stats) {
   std::println("\n📊 STRATEGY PERFORMANCE");
@@ -509,6 +541,9 @@ void run_live_trading(
     std::println("\n{:-<70}", "");
     std::println("Tick at {:%Y-%m-%d %H:%M:%S}", now);
     std::println("{:-<70}", "");
+
+    // Display account status
+    print_account_stats(client);
 
     // Fetch and process positions
     auto positions_result = client.get_positions();
@@ -689,12 +724,36 @@ void run_live_trading(
 
                 auto order = client.place_order(symbol, "buy", notional_amount);
                 if (order) {
-                  std::println("✅ Order placed");
-                  existing_positions.insert(symbol);
-                  position_strategies[symbol] = signal.strategy_name;
-                  position_configs[symbol] = configs.at(signal.strategy_name);
-                  position_entry_times[symbol] = now;
-                  ++strategy_stats[signal.strategy_name].trades_executed;
+                  // Parse order response to verify status
+                  auto order_json = nlohmann::json::parse(order.value(), nullptr, false);
+                  if (not order_json.is_discarded()) {
+                    auto order_id = order_json.value("id", "unknown");
+                    auto status = order_json.value("status", "unknown");
+                    auto side = order_json.value("side", "unknown");
+                    auto notional_str = order_json.value("notional", "0");
+
+                    std::println("✅ Order placed: ID={} status={} side={} notional=${}",
+                                order_id, status, side, notional_str);
+
+                    // Only count as executed if order is accepted
+                    if (status == "accepted" or status == "pending_new" or status == "filled") {
+                      existing_positions.insert(symbol);
+                      position_strategies[symbol] = signal.strategy_name;
+                      position_configs[symbol] = configs.at(signal.strategy_name);
+                      position_entry_times[symbol] = now;
+                      ++strategy_stats[signal.strategy_name].trades_executed;
+                    } else {
+                      std::println("{}⚠  Order status '{}' - may not execute{}",
+                                  colour_yellow, status, colour_reset);
+                    }
+                  } else {
+                    std::println("✅ Order placed (could not parse response)");
+                    existing_positions.insert(symbol);
+                    position_strategies[symbol] = signal.strategy_name;
+                    position_configs[symbol] = configs.at(signal.strategy_name);
+                    position_entry_times[symbol] = now;
+                    ++strategy_stats[signal.strategy_name].trades_executed;
+                  }
                 } else {
                   std::println("❌ Order failed");
                 }
@@ -758,12 +817,36 @@ void run_live_trading(
 
                 auto order = client.place_order(symbol, "buy", notional_amount);
                 if (order) {
-                  std::println("✅ Order placed");
-                  existing_positions.insert(symbol);
-                  position_strategies[symbol] = signal.strategy_name;
-                  position_configs[symbol] = configs.at(signal.strategy_name);
-                  position_entry_times[symbol] = now;
-                  ++strategy_stats[signal.strategy_name].trades_executed;
+                  // Parse order response to verify status
+                  auto order_json = nlohmann::json::parse(order.value(), nullptr, false);
+                  if (not order_json.is_discarded()) {
+                    auto order_id = order_json.value("id", "unknown");
+                    auto status = order_json.value("status", "unknown");
+                    auto side = order_json.value("side", "unknown");
+                    auto notional_str = order_json.value("notional", "0");
+
+                    std::println("✅ Order placed: ID={} status={} side={} notional=${}",
+                                order_id, status, side, notional_str);
+
+                    // Only count as executed if order is accepted
+                    if (status == "accepted" or status == "pending_new" or status == "filled") {
+                      existing_positions.insert(symbol);
+                      position_strategies[symbol] = signal.strategy_name;
+                      position_configs[symbol] = configs.at(signal.strategy_name);
+                      position_entry_times[symbol] = now;
+                      ++strategy_stats[signal.strategy_name].trades_executed;
+                    } else {
+                      std::println("{}⚠  Order status '{}' - may not execute{}",
+                                  colour_yellow, status, colour_reset);
+                    }
+                  } else {
+                    std::println("✅ Order placed (could not parse response)");
+                    existing_positions.insert(symbol);
+                    position_strategies[symbol] = signal.strategy_name;
+                    position_configs[symbol] = configs.at(signal.strategy_name);
+                    position_entry_times[symbol] = now;
+                    ++strategy_stats[signal.strategy_name].trades_executed;
+                  }
                 } else {
                   std::println("❌ Order failed");
                 }
