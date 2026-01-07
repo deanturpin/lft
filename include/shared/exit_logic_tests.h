@@ -3,6 +3,11 @@
 
 namespace {
 
+// Constexpr tolerance helper for floating-point comparisons
+constexpr bool near(double a, double b, double eps = 1e-12) {
+  return (a > b ? a - b : b - a) <= eps;
+}
+
 // User-defined literal for percentages
 constexpr double operator""_pc(long double x) { return x / 100.0; }
 constexpr double operator""_pc(unsigned long long x) { return x / 100.0; }
@@ -55,10 +60,29 @@ constexpr bool is_stop_loss(double entry_price, double current_price,
 }
 
 // Check if trailing stop is triggered
+// Note: Uses strict inequality (<), so exactly touching the stop does NOT trigger
 constexpr bool is_trailing_stop(double peak_price, double current_price,
                                  double trailing_pct) {
   auto trailing_stop_price = peak_price * (1.0 - trailing_pct);
   return current_price < trailing_stop_price;
+}
+
+// Exit reason priority (represents actual exit decision logic)
+enum class ExitReason { None, StopLoss, TakeProfit, TrailingStop };
+
+// Determine exit reason with proper priority
+// Priority order: StopLoss > TakeProfit > TrailingStop
+// This reflects that protective stops should be checked first
+constexpr ExitReason exit_reason(double entry_price, double peak_price,
+                                  double current_price, double tp_pct,
+                                  double sl_pct, double trailing_pct) {
+  if (is_stop_loss(entry_price, current_price, sl_pct))
+    return ExitReason::StopLoss;
+  if (is_take_profit(entry_price, current_price, tp_pct))
+    return ExitReason::TakeProfit;
+  if (is_trailing_stop(peak_price, current_price, trailing_pct))
+    return ExitReason::TrailingStop;
+  return ExitReason::None;
 }
 
 // Apply spread to mid price
@@ -69,21 +93,21 @@ constexpr double apply_spread(double mid_price, double spread_pct,
 }
 
 // Basic P&L calculation tests
-static_assert(calc_pl_pct(100.0, 102.0) == 0.02, "2% gain calculation");
-static_assert(calc_pl_pct(100.0, 98.0) == -0.02, "-2% loss calculation");
-static_assert(calc_pl_pct(100.0, 100.0) == 0.0, "No change calculation");
+static_assert(near(calc_pl_pct(100.0, 102.0), 0.02), "2% gain calculation");
+static_assert(near(calc_pl_pct(100.0, 98.0), -0.02), "-2% loss calculation");
+static_assert(near(calc_pl_pct(100.0, 100.0), 0.0), "No change calculation");
 
 // Noise calculation tests
-static_assert(bar_noise(102.0, 98.0, 100.0) == 0.04, "4% noise: high=102, low=98, close=100");
-static_assert(bar_noise(100.5, 99.5, 100.0) == 0.01, "1% noise: tight range");
-static_assert(bar_noise(110.0, 90.0, 100.0) == 0.20, "20% noise: very volatile bar");
-static_assert(bar_noise(100.0, 100.0, 100.0) == 0.0, "0% noise: no movement");
+static_assert(near(bar_noise(102.0, 98.0, 100.0), 0.04), "4% noise: high=102, low=98, close=100");
+static_assert(near(bar_noise(100.5, 99.5, 100.0), 0.01), "1% noise: tight range");
+static_assert(near(bar_noise(110.0, 90.0, 100.0), 0.20), "20% noise: very volatile bar");
+static_assert(near(bar_noise(100.0, 100.0, 100.0), 0.0), "0% noise: no movement");
 
 // Adaptive TP/SL tests
 // Low noise (0.5%) → use base 2% TP/SL (2% > 1.5%)
-static_assert(adaptive_take_profit(2_pc, 0.005) == 2_pc,
+static_assert(near(adaptive_take_profit(2_pc, 0.005), 2_pc),
               "Low noise: use base TP");
-static_assert(adaptive_stop_loss(2_pc, 0.005) == 2_pc,
+static_assert(near(adaptive_stop_loss(2_pc, 0.005), 2_pc),
               "Low noise: use base SL");
 
 // High noise (1%) → use base 2% TP/SL (2% < 3%)
@@ -106,7 +130,7 @@ static_assert(adaptive_take_profit(2_pc, 0.0066667) > 0.0199 && adaptive_take_pr
 // Realistic scenario: AAPL typical 0.3% intrabar range
 // 0.3% noise → 3x = 0.9%, base 2% wins
 constexpr auto aapl_noise = 0.003;
-static_assert(adaptive_take_profit(2_pc, aapl_noise) == 2_pc,
+static_assert(near(adaptive_take_profit(2_pc, aapl_noise), 2_pc),
               "AAPL typical noise: use base TP");
 
 // Volatile scenario: TSLA 1.5% intrabar range
@@ -128,6 +152,7 @@ static_assert(!is_stop_loss(100.0, 98.01, 2_pc), "No SL above -2%");
 static_assert(!is_stop_loss(100.0, 99.0, 2_pc), "No SL at -1%");
 
 // Trailing stop tests (1% from peak)
+// Uses strict inequality: current < threshold triggers, current == threshold does NOT
 static_assert(is_trailing_stop(105.0, 103.94, 1_pc),
               "Trailing stop at 1% below peak");
 static_assert(is_trailing_stop(105.0, 103.0, 1_pc),
@@ -137,16 +162,22 @@ static_assert(!is_trailing_stop(105.0, 103.96, 1_pc),
 static_assert(!is_trailing_stop(105.0, 105.0, 1_pc),
               "No trailing stop at peak");
 
+// Trailing stop boundary test: exactly touching the threshold does NOT trigger
+constexpr auto boundary_peak = 100.0;
+constexpr auto boundary_threshold = boundary_peak * (1.0 - trailing_stop_pct); // 99.0
+static_assert(!is_trailing_stop(boundary_peak, boundary_threshold, trailing_stop_pct),
+              "Boundary test: exactly touching stop threshold does NOT trigger (must cross below)");
+
 // Spread application tests (2 basis points = 0.02%)
-static_assert(apply_spread(100.0, stock_spread, true) == 100.01,
+static_assert(near(apply_spread(100.0, stock_spread, true), 100.01),
               "Buy stock at ask (mid + half spread)");
-static_assert(apply_spread(100.0, stock_spread, false) == 99.99,
+static_assert(near(apply_spread(100.0, stock_spread, false), 99.99),
               "Sell stock at bid (mid - half spread)");
 
 // Crypto spread tests (10 basis points = 0.1%)
-static_assert(apply_spread(100.0, crypto_spread, true) == 100.05,
+static_assert(near(apply_spread(100.0, crypto_spread, true), 100.05),
               "Buy crypto at ask");
-static_assert(apply_spread(100.0, crypto_spread, false) == 99.95,
+static_assert(near(apply_spread(100.0, crypto_spread, false), 99.95),
               "Sell crypto at bid");
 
 // Realistic scenario: Entry at $100, peaked at $102, now at $101
@@ -255,10 +286,11 @@ static_assert(scenario1_pl >= 0.020 && scenario1_pl < 0.0202,
 static_assert(is_take_profit(scenario1_entry_price, scenario1_exit_price, 2_pc),
               "Scenario 1: Take profit triggers");
 
-// Scenario 2: STOP LOSS - Stock falls to exactly trigger -2% SL
+// Scenario 2: STOP LOSS - Stock falls to trigger -2% SL
 // Entry at $100 mid → buy at ask $100.01
 // Price falls to $97.9796 mid → sell at bid $97.9696
 // P&L = (97.9696 - 100.01) / 100.01 = -2.0404 / 100.01 ≈ -2.04%
+// Note: Loss is worse than -2% due to spread impact (buy at ask, sell at bid)
 constexpr auto scenario2_entry_mid = 100.0;
 constexpr auto scenario2_entry_price = apply_spread(scenario2_entry_mid, stock_spread, true);
 constexpr auto scenario2_exit_mid = 97.9796;
@@ -266,7 +298,7 @@ constexpr auto scenario2_exit_price = apply_spread(scenario2_exit_mid, stock_spr
 constexpr auto scenario2_pl = calc_pl_pct(scenario2_entry_price, scenario2_exit_price);
 
 static_assert(scenario2_pl < -0.0199 && scenario2_pl > -0.0210,
-              "Scenario 2: ~-2% loss");
+              "Scenario 2: Loss is ~-2.04% (spread worsens the -2% SL trigger)");
 static_assert(is_stop_loss(scenario2_entry_price, scenario2_exit_price, 2_pc),
               "Scenario 2: Stop loss triggers");
 
@@ -277,7 +309,7 @@ static_assert(is_stop_loss(scenario2_entry_price, scenario2_exit_price, 2_pc),
 // Trailing stop price = 105 * 0.99 = 103.95
 // Sell price 103.9296 < 103.95, so trailing stop triggers
 // P&L = (103.9296 - 100.01) / 100.01 ≈ 3.92%
-// Note: This also triggers take profit (>2%), but trailing stop detected it first
+// Note: Both TP and trailing stop conditions are met, but TP has priority
 constexpr auto scenario3_entry_mid = 100.0;
 constexpr auto scenario3_entry_price = apply_spread(scenario3_entry_mid, stock_spread, true);
 constexpr auto scenario3_peak_mid = 105.0;
@@ -288,9 +320,12 @@ constexpr auto scenario3_pl = calc_pl_pct(scenario3_entry_price, scenario3_exit_
 static_assert(scenario3_pl > 0.039 && scenario3_pl < 0.040,
               "Scenario 3: ~3.92% gain before trailing stop");
 static_assert(is_trailing_stop(scenario3_peak_mid, scenario3_exit_price, 1_pc),
-              "Scenario 3: Trailing stop triggers at 1% below peak");
+              "Scenario 3: Trailing stop condition met (1% below peak)");
 static_assert(is_take_profit(scenario3_entry_price, scenario3_exit_price, 2_pc),
-              "Scenario 3: Also exceeds take profit (but trailing stop wins)");
+              "Scenario 3: Take profit condition also met (>2% gain)");
+static_assert(exit_reason(scenario3_entry_price, scenario3_peak_mid, scenario3_exit_price,
+                         take_profit_pct, stop_loss_pct, trailing_stop_pct) == ExitReason::TakeProfit,
+              "Scenario 3: Exit decision is TakeProfit (has priority over trailing stop)");
 
 // Scenario 4: NEAR MISS - Stock rises to 1.99%, doesn't trigger TP
 // Entry at $100 mid → buy at ask $100.01
