@@ -37,7 +37,7 @@ constexpr auto calibration_days = 30; // Use last 30 days for better calibration
 // Fixed exit parameters (same for all strategies)
 constexpr auto take_profit_pct = 0.02;   // 2%
 constexpr auto stop_loss_pct = -0.02;    // -2%
-constexpr auto trailing_stop_pct = 0.015; // 1.5%
+constexpr auto trailing_stop_pct = 0.005; // 0.5%
 
 // Position tracking for backtest
 struct Position {
