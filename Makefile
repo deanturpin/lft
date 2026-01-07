@@ -1,27 +1,16 @@
-.PHONY: all build run lft ticker backtest clean test
+.PHONY: all build run clean test
 
-# Default target: build and run lft (calibrate + live)
-all: build lft
+# Default target: build and run
+all: build run
 
 # Build the project
 build:
 	@mkdir -p build
 	@cd build && cmake .. && cmake --build .
 
-# Run unified calibrate-and-execute
-lft: build
+# Run the trading system
+run: build
 	@./build/lft
-
-# Run the ticker with multi-strategy trading (legacy)
-ticker: build
-	@./build/ticker --strategies
-
-# Run standalone backtesting
-backtest: build
-	@./build/backtest
-
-# Alias for lft
-run: lft
 
 # Clean build artifacts
 clean:

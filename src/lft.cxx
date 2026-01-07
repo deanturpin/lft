@@ -16,6 +16,10 @@ using namespace std::chrono_literals;
 
 namespace {
 
+// User-defined literal for percentages
+constexpr double operator""_pc(long double x) { return x / 100.0; }
+constexpr double operator""_pc(unsigned long long x) { return x / 100.0; }
+
 // ANSI colour codes
 constexpr auto colour_reset = "\033[0m";
 constexpr auto colour_green = "\033[32m";
@@ -24,20 +28,20 @@ constexpr auto colour_cyan = "\033[36m";
 constexpr auto colour_yellow = "\033[33m";
 
 // Trading parameters
-constexpr auto dip_threshold = -0.2;
+constexpr auto dip_threshold = -0.2_pc;
 constexpr auto notional_amount = 100.0;
 
 // Spread simulation (buy at ask, sell at bid)
-constexpr auto stock_spread_bps = 2.0;   // 2 basis points = 0.02%
-constexpr auto crypto_spread_bps = 10.0; // 10 basis points = 0.1%
+constexpr auto stock_spread_bps = 0.02_pc;  // 2 basis points = 0.02%
+constexpr auto crypto_spread_bps = 0.1_pc;  // 10 basis points = 0.1%
 
 // Calibration parameters
 constexpr auto calibration_days = 30; // Use last 30 days for better calibration
 
 // Fixed exit parameters (same for all strategies)
-constexpr auto take_profit_pct = 0.02;   // 2%
-constexpr auto stop_loss_pct = -0.02;    // -2%
-constexpr auto trailing_stop_pct = 0.005; // 0.5%
+constexpr auto take_profit_pct = 1_pc;
+constexpr auto stop_loss_pct = -1_pc;
+constexpr auto trailing_stop_pct = 0.5_pc;
 
 // Position tracking for backtest
 struct Position {
@@ -77,7 +81,7 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
     // Apply spread: sell at bid (mid - half spread)
     auto is_crypto = symbol.find('/') != std::string::npos;
     auto spread_bps = is_crypto ? crypto_spread_bps : stock_spread_bps;
-    auto half_spread = bar.close * (spread_bps / 2.0) / 10000.0;
+    auto half_spread = bar.close * (spread_bps / 2.0);
     auto sell_price = bar.close - half_spread;
 
     auto current_value = pos.quantity * sell_price;
@@ -143,7 +147,7 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
           // Apply spread: buy at ask (mid + half spread)
           auto is_crypto = symbol.find('/') != std::string::npos;
           auto spread_bps = is_crypto ? crypto_spread_bps : stock_spread_bps;
-          auto half_spread = bar.close * (spread_bps / 2.0) / 10000.0;
+          auto half_spread = bar.close * (spread_bps / 2.0);
           auto buy_price = bar.close + half_spread;
 
           auto quantity = notional_amount / buy_price;
@@ -173,9 +177,7 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
   }
 }
 
-// Run backtest with pre-fetched data (fast - for calibration)
-
-// why backtests mentions here?
+// Run calibration simulation with pre-fetched data
 BacktestStats run_backtest_with_data(
     const std::map<std::string, std::vector<lft::Bar>> &symbol_bars,
     const std::map<std::string, lft::StrategyConfig> &configs) {
@@ -222,7 +224,7 @@ BacktestStats run_backtest_with_data(
     auto is_crypto = symbol.find('/') != std::string::npos;
     auto spread_bps = is_crypto ? crypto_spread_bps : stock_spread_bps;
     auto final_mid = bars.back().close;
-    auto half_spread = final_mid * (spread_bps / 2.0) / 10000.0;
+    auto half_spread = final_mid * (spread_bps / 2.0);
     auto final_sell_price = final_mid - half_spread;
 
     auto current_value = pos.quantity * final_sell_price;
@@ -386,7 +388,7 @@ void print_header() {
 
 void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
                     lft::PriceHistory &history) {
-  constexpr auto alert_threshold = 2.0;
+  constexpr auto alert_threshold = 2_pc;
   auto status = std::string{};
   auto colour = colour_reset;
 
@@ -731,33 +733,22 @@ int main() {
   auto crypto =
       std::vector<std::string>{"BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD"};
 
-  // Continuous calibrate-trade loop
-  while (true) {
-    // Phase 1: Calibrate
-    auto configs = calibrate_all_strategies(client, stocks, crypto);
+  // Phase 1: Calibrate
+  auto configs = calibrate_all_strategies(client, stocks, crypto);
 
-    // Check if any strategies are enabled
-    auto enabled_any = false;
-    for (const auto &[name, config] : configs) {
-      if (config.enabled) {
-        enabled_any = true;
-        break;
-      }
-    }
-
-    if (not enabled_any) {
-      std::println("{}⚠ No profitable strategies found. Waiting 1 hour before retry.{}",
-                   colour_yellow, colour_reset);
-      std::this_thread::sleep_for(std::chrono::hours(1));
-      continue;
-    }
-
-    // Phase 2: Live trading (runs for 1 hour)
-    run_live_trading(client, stocks, crypto, configs);
-
-    std::println("\n{}🔄 1-hour trading session complete. Re-calibrating...{}\n",
-                 colour_cyan, colour_reset);
+  // Check if any strategies are enabled
+  auto enabled_count = 0;
+  for (const auto &[name, config] : configs) {
+    if (config.enabled)
+      ++enabled_count;
   }
+
+  if (enabled_count == 0)
+    std::println("{}⚠ No profitable strategies - will only manage exits{}\n",
+                 colour_yellow, colour_reset);
+
+  // Phase 2: Live trading (runs for 1 hour, then exits)
+  run_live_trading(client, stocks, crypto, configs);
 
   return 0;
 }

@@ -44,21 +44,9 @@ add_library(strategies STATIC
 )
 target_link_libraries(strategies PUBLIC alpaca_client)
 
-# Unified calibrate-and-execute executable
+# Main executable
 add_executable(lft src/lft.cxx)
 target_link_libraries(lft PRIVATE alpaca_client strategies)
-
-# Manual ticker executable
-add_executable(ticker src/manual/ticker.cxx)
-target_link_libraries(ticker PRIVATE alpaca_client strategies)
-
-# Positions viewer executable
-add_executable(positions src/manual/positions.cxx)
-target_link_libraries(positions PRIVATE alpaca_client)
-
-# Backtest executable
-add_executable(backtest src/backtest/backtest.cxx)
-target_link_libraries(backtest PRIVATE alpaca_client strategies)
 
 # Enable testing
 enable_testing()

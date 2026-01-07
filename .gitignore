@@ -6,15 +6,9 @@ cmake-build-*/
 *.so
 *.dylib
 
-# Executables (in root/build only, not src/)
+# Executables
 /lft
-/ticker
-/backtest
-/auto-trader
 build/lft
-build/ticker
-build/backtest
-build/auto-trader
 
 # IDE
 .vscode/

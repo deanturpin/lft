@@ -8,7 +8,7 @@
 
 ## Quick Start
 
-### 1. Get Alpaca Paper Trading API Keys
+### 1. Get Alpaca API Keys
 
 1. Sign up at [Alpaca Markets](https://app.alpaca.markets/signup)
 2. Go to paper trading dashboard
@@ -27,43 +27,76 @@ nano .env
 source .env
 ```
 
-### 3. Build
+### 3. Build and Run
 
 ```bash
-# Create build directory
-mkdir build && cd build
-
-# Configure
-cmake ..
-
-# Build
-cmake --build .
-
-# Run ticker
-./ticker
+# Build and run (one command!)
+make run
 ```
 
 ## What You Should See
 
+###  Phase 1: Calibration
+
 ```
-Testing Alpaca connection...
-✅ Connected to Alpaca (paper trading)
+🤖 LFT - LOW FREQUENCY TRADER
+Calibrate → Execute Workflow
 
-Monitoring 5 symbols (polling every 60s, alert threshold: 2.0%)
-Press Ctrl+C to stop
+🎯 CALIBRATION PHASE
+Testing last 30 days of data with fixed exit parameters
+Exit parameters:
+  Take Profit: 1.0%
+  Stop Loss: -1.0%
+  Trailing Stop: 0.5%
 
-⏰ Update at 2026-01-06 12:34:56
+📥 Fetching historic data
+  AAPL - 28800 bars
+  TSLA - 28800 bars
+  ...
+
+🔧 Testing dip...
+✓ dip Complete: 1234 signals, 567 trades, $123.45 P&L, 58.2% WR
+...
+
+📊 CALIBRATION RESULTS
+--------------------------------------------------------------------------------
+dip                    ENABLED P&L=$  123.45 WR= 58.2%
+ma_crossover          DISABLED P&L=$  -45.67 WR= 45.3%
+...
+
+2 of 5 strategies enabled for live trading
+```
+
+### Phase 2: Live Trading
+
+```
+🚀 LIVE TRADING MODE
+Using calibrated exit parameters per strategy
+Running for 1 hour, then will re-calibrate
+
+Tick at 2026-01-07 10:00:00
+----------------------------------------------------------------------
 
 SYMBOL           LAST          BID          ASK    CHANGE% STATUS
 ----------------------------------------------------------------------
-AAPL           185.23       185.22       185.24      0.00%
-TSLA           242.15       242.10       242.20      0.00%
-NVDA           495.80       495.75       495.85      0.00%
-BTC/USD      42350.50     42348.00     42353.00      0.00%
-ETH/USD       2245.80      2245.20      2246.40      0.00%
+AAPL           185.23       185.22       185.24      0.12%
+TSLA           242.15       242.10       242.20     -0.34%
+...
+
+📊 STRATEGY PERFORMANCE
+--------------------------------------------------------------------------------------------------------------
+STRATEGY           SIGNALS   EXECUTED     CLOSED       WINS   WIN RATE      NET P&L      AVG P&L
+--------------------------------------------------------------------------------------------------------------
+dip                      3          2          1          1      100.0%         1.23         1.23
+...
 ```
 
-If a symbol moves >2% in a minute, you'll see 🚨 ALERT.
+If a strategy fires, you'll see:
+```
+🚨 SIGNAL: dip - Price dropped 0.21%
+   Buying $100 of AAPL...
+✅ Order placed
+```
 
 ## Troubleshooting
 
@@ -81,7 +114,8 @@ If a symbol moves >2% in a minute, you'll see 🚨 ALERT.
 
 ## Next Steps
 
-Once ticker is working, you're ready to:
-1. Explore the Alpaca API more deeply
-2. Add order placement (buy/sell)
-3. Start building backtesting infrastructure
+Once lft is working, you're ready to:
+1. Let it run through a full calibration + trading cycle
+2. Monitor the strategies that get enabled
+3. Review the P&L after the 1-hour trading session
+4. Deploy to a VPS for continuous operation (see [VPS_DEPLOYMENT.md](VPS_DEPLOYMENT.md))
