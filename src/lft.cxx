@@ -439,7 +439,7 @@ void run_live_trading(
 
   std::println("{}🚀 LIVE TRADING MODE{}", colour_green, colour_reset);
   std::println("Using calibrated exit parameters per strategy");
-  std::println("Press Ctrl+C to stop\n");
+  std::println("Running for 1 hour, then will re-calibrate\n");
 
   auto price_histories = std::map<std::string, lft::PriceHistory>{};
   auto position_strategies = std::map<std::string, std::string>{};
@@ -454,7 +454,10 @@ void run_live_trading(
       strategy_stats[name] = lft::StrategyStats{name};
   }
 
-  while (true) {
+  auto start_time = std::chrono::system_clock::now();
+  auto end_time = start_time + std::chrono::hours(1);
+
+  while (std::chrono::system_clock::now() < end_time) {
     auto now = std::chrono::system_clock::now();
     std::println("\n{:-<70}", "");
     std::println("Tick at {:%Y-%m-%d %H:%M:%S}", now);
@@ -728,26 +731,33 @@ int main() {
   auto crypto =
       std::vector<std::string>{"BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD"};
 
-  // Phase 1: Calibrate
-  auto configs = calibrate_all_strategies(client, stocks, crypto);
+  // Continuous calibrate-trade loop
+  while (true) {
+    // Phase 1: Calibrate
+    auto configs = calibrate_all_strategies(client, stocks, crypto);
 
-  // Check if any strategies are enabled
-  auto enabled_any = false;
-  for (const auto &[name, config] : configs) {
-    if (config.enabled) {
-      enabled_any = true;
-      break;
+    // Check if any strategies are enabled
+    auto enabled_any = false;
+    for (const auto &[name, config] : configs) {
+      if (config.enabled) {
+        enabled_any = true;
+        break;
+      }
     }
-  }
 
-  if (not enabled_any) {
-    std::println("{}⚠ No profitable strategies found. Exiting.{}",
-                 colour_yellow, colour_reset);
-    return 1;
-  }
+    if (not enabled_any) {
+      std::println("{}⚠ No profitable strategies found. Waiting 1 hour before retry.{}",
+                   colour_yellow, colour_reset);
+      std::this_thread::sleep_for(std::chrono::hours(1));
+      continue;
+    }
 
-  // Phase 2: Live trading
-  run_live_trading(client, stocks, crypto, configs);
+    // Phase 2: Live trading (runs for 1 hour)
+    run_live_trading(client, stocks, crypto, configs);
+
+    std::println("\n{}🔄 1-hour trading session complete. Re-calibrating...{}\n",
+                 colour_cyan, colour_reset);
+  }
 
   return 0;
 }
