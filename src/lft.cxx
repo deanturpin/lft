@@ -456,10 +456,11 @@ void run_live_trading(
       strategy_stats[name] = lft::StrategyStats{name};
   }
 
-  auto start_time = std::chrono::system_clock::now();
-  auto end_time = start_time + std::chrono::hours(1);
+  constexpr auto max_cycles = 60; // Run for 60 minutes (60 cycles)
+  auto cycle = 0;
 
-  while (std::chrono::system_clock::now() < end_time) {
+  while (cycle < max_cycles) {
+    ++cycle;
     auto now = std::chrono::system_clock::now();
     std::println("\n{:-<70}", "");
     std::println("Tick at {:%Y-%m-%d %H:%M:%S}", now);
@@ -731,12 +732,11 @@ void run_live_trading(
     // Print stats
     print_strategy_stats(strategy_stats);
 
-    // Calculate time remaining
-    auto time_left = end_time - std::chrono::system_clock::now();
-    auto minutes_remaining = std::chrono::duration_cast<std::chrono::minutes>(time_left).count();
+    // Calculate cycles remaining
+    auto cycles_remaining = max_cycles - cycle;
 
-    std::println("\n⏳ Next update in 60 seconds | {} minutes until re-calibration\n",
-                 minutes_remaining);
+    std::println("\n⏳ Next update in 60 seconds | {} cycles until re-calibration\n",
+                 cycles_remaining);
     std::this_thread::sleep_for(60s);
   }
 }
