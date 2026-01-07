@@ -1,15 +1,23 @@
 #include "shared/strategies.h"
+#include <cassert>
 #include <cmath>
 #include <format>
 
 namespace lft {
 
 StrategySignal Strategies::evaluate_dip(const PriceHistory& history, double threshold) {
+    // Defensive assertions: threshold should be negative for a "dip"
+    assert(threshold < 0.0 && "Dip threshold must be negative");
+    assert(std::isfinite(threshold) && "Threshold must be finite");
+
     auto signal = StrategySignal{};
     signal.strategy_name = "dip";
 
     if (not history.has_history)
         return signal;
+
+    // Validate price change is finite
+    assert(std::isfinite(history.change_percent) && "Change percent must be finite");
 
     if (history.change_percent <= threshold) {
         signal.should_buy = true;
@@ -29,6 +37,10 @@ StrategySignal Strategies::evaluate_ma_crossover(const PriceHistory& history) {
 
     auto ma_short = history.moving_average(5);   // 5-period MA
     auto ma_long = history.moving_average(20);   // 20-period MA
+
+    // Defensive assertions: MAs should be valid
+    assert(std::isfinite(ma_short) && ma_short > 0.0 && "Short MA must be positive and finite");
+    assert(std::isfinite(ma_long) && ma_long > 0.0 && "Long MA must be positive and finite");
 
     // Previous values to detect crossover
     if (history.prices.size() < 21)
@@ -68,6 +80,11 @@ StrategySignal Strategies::evaluate_mean_reversion(const PriceHistory& history) 
     auto ma = history.moving_average(20);
     auto std_dev = history.volatility();
 
+    // Defensive assertions: validate statistical values
+    assert(std::isfinite(current_price) && current_price > 0.0 && "Current price must be positive and finite");
+    assert(std::isfinite(ma) && ma > 0.0 && "MA must be positive and finite");
+    assert(std::isfinite(std_dev) && std_dev > 0.0 && "Std dev must be positive and finite");
+
     // Buy when price is more than 2 standard deviations below MA
     auto deviation = (current_price - ma) / std_dev;
 
@@ -90,11 +107,16 @@ StrategySignal Strategies::evaluate_volatility_breakout(const PriceHistory& hist
     auto recent_volatility = 0.0;
     for (auto i = history.prices.size() - 5; i < history.prices.size() - 1; ++i) {
         auto change = std::abs((history.prices[i + 1] - history.prices[i]) / history.prices[i]);
+        assert(std::isfinite(change) && "Price change must be finite");
         recent_volatility += change;
     }
     recent_volatility /= 4;
 
     auto historical_volatility = history.volatility();
+
+    // Defensive assertions: validate volatility calculations
+    assert(std::isfinite(recent_volatility) && recent_volatility >= 0.0 && "Recent volatility must be non-negative and finite");
+    assert(std::isfinite(historical_volatility) && historical_volatility >= 0.0 && "Historical volatility must be non-negative and finite");
 
     // Buy when volatility expands (breakout from compression)
     if (historical_volatility > 0 and recent_volatility > historical_volatility * 1.5 and history.change_percent > 0) {
@@ -115,12 +137,16 @@ StrategySignal Strategies::evaluate_relative_strength(
     if (not history.has_history)
         return signal;
 
+    // Defensive assertion: ensure we have assets to compare against
+    assert(!all_histories.empty() && "Need at least one asset for relative strength");
+
     // Calculate average change across all assets
     auto total_change = 0.0;
     auto count = 0uz;
 
     for (const auto& [symbol, hist] : all_histories) {
         if (hist.has_history) {
+            assert(std::isfinite(hist.change_percent) && "Change percent must be finite");
             total_change += hist.change_percent;
             ++count;
         }
@@ -130,6 +156,7 @@ StrategySignal Strategies::evaluate_relative_strength(
         return signal;
 
     auto market_average = total_change / count;
+    assert(std::isfinite(market_average) && "Market average must be finite");
 
     // Buy if this asset is outperforming market by >0.5%
     if (history.change_percent > market_average + 0.5) {
