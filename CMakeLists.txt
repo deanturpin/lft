@@ -47,7 +47,3 @@ target_link_libraries(strategies PUBLIC alpaca_client)
 # Main executable
 add_executable(lft src/lft.cxx)
 target_link_libraries(lft PRIVATE alpaca_client strategies)
-
-# Enable testing
-enable_testing()
-add_subdirectory(tests)

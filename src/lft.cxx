@@ -17,7 +17,7 @@
 // Include compile-time exit logic tests
 // This header defines: operator""_pc, stock_spread, crypto_spread,
 // take_profit_pct, stop_loss_pct, trailing_stop_pct
-#include "../tests/exit_logic_tests.h"
+#include "shared/exit_logic_tests.h"
 
 using namespace std::chrono_literals;
 
