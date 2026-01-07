@@ -5,7 +5,7 @@ A C++23 multi-strategy automated trading system for US stocks and crypto.
 ## Features
 
 **Multi-Strategy Framework**
-- 5 concurrent trading strategies evaluated each interval
+- 6 concurrent trading strategies evaluated each interval
 - Automatic calibration on 30 days of historic data with spread simulation
 - Only enables profitable strategies based on backtest results
 - Per-strategy performance tracking with win rate and P&L metrics
@@ -18,11 +18,13 @@ A C++23 multi-strategy automated trading system for US stocks and crypto.
 3. **Mean Reversion** - Price >2 standard deviations below MA
 4. **Volatility Breakout** - Expansion from compression with volume
 5. **Relative Strength** - Outperformance vs market basket by >0.5%
+6. **Volume Surge** - 2x average volume with upward momentum >0.5%
 
-**Exit Parameters** (1:1 risk/reward)
-- Take Profit: 2%
-- Stop Loss: -2%
-- Trailing Stop: 0.5%
+**Adaptive Risk Management**
+- Noise-aware TP/SL: Widens targets in volatile conditions (3:1 signal-to-noise ratio)
+- Volume confidence filtering: Reduces signal confidence in low-volume periods
+- Noise regime detection: Disables momentum strategies in high noise (>1.5%), disables mean reversion in low noise (<0.5%)
+- Base exit parameters: 2% TP/SL, 0.5% trailing stop (adaptive based on market conditions)
 
 ## Quick Start
 

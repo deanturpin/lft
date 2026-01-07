@@ -124,25 +124,52 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
       stats.positions.erase(symbol);
     }
   } else {
+    // Noise regime detection: classify market conditions
+    auto recent_noise = history.recent_noise(20);
+    auto low_noise_regime = recent_noise > 0.0 and recent_noise < 0.005;   // <0.5% noise
+    auto high_noise_regime = recent_noise > 0.015;                          // >1.5% noise
+
     // Evaluate entry strategies
     auto signals = std::vector<lft::StrategySignal>{
-        // is this history of all assets?
         lft::Strategies::evaluate_dip(history, dip_threshold),
         lft::Strategies::evaluate_ma_crossover(history),
         lft::Strategies::evaluate_mean_reversion(history),
         lft::Strategies::evaluate_volatility_breakout(history),
-        lft::Strategies::evaluate_relative_strength(history, all_histories)};
+        lft::Strategies::evaluate_relative_strength(history, all_histories),
+        lft::Strategies::evaluate_volume_surge(history)};
 
     // Count signals and execute trades ONLY for enabled strategies
-    for (const auto &signal : signals) {
+    for (auto signal : signals) {
       // Only process signals from enabled strategies (during calibration, only
       // one is enabled)
       if (not configs.contains(signal.strategy_name) or
           not configs.at(signal.strategy_name).enabled)
         continue;
 
+      // Apply low-volume confidence filter
+      auto vol_factor = history.volume_factor();
+      signal.confidence /= vol_factor;  // Reduce confidence in low-volume conditions
+
+      // Noise regime filtering: disable momentum strategies in high noise
+      if (high_noise_regime and
+          (signal.strategy_name == "ma_crossover" or
+           signal.strategy_name == "volatility_breakout" or
+           signal.strategy_name == "volume_surge")) {
+        continue;  // Skip momentum strategies in noisy conditions
+      }
+
+      // Noise regime filtering: disable mean reversion in low noise
+      if (low_noise_regime and signal.strategy_name == "mean_reversion") {
+        continue;  // Skip mean reversion in trending conditions
+      }
+
       if (signal.should_buy) {
         ++stats.strategy_stats[signal.strategy_name].signals_generated;
+
+        // Filter low-confidence signals (reject if confidence <0.7)
+        constexpr auto min_confidence = 0.7;
+        if (signal.confidence < min_confidence)
+          continue;
 
         // Execute if we have cash
         if (stats.cash >= notional_amount) {
@@ -199,6 +226,7 @@ BacktestStats run_backtest_with_data(
       lft::StrategyStats{"volatility_breakout"};
   stats.strategy_stats["relative_strength"] =
       lft::StrategyStats{"relative_strength"};
+  stats.strategy_stats["volume_surge"] = lft::StrategyStats{"volume_surge"};
 
   auto price_histories = std::map<std::string, lft::PriceHistory>{};
 
@@ -350,7 +378,8 @@ calibrate_all_strategies(lft::AlpacaClient &client,
 
   auto strategies =
       std::vector<std::string>{"dip", "ma_crossover", "mean_reversion",
-                               "volatility_breakout", "relative_strength"};
+                               "volatility_breakout", "relative_strength",
+                               "volume_surge"};
 
   // Calibrate all strategies in parallel using threads
   auto strategy_configs = std::vector<lft::StrategyConfig>(strategies.size());

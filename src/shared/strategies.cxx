@@ -168,4 +168,36 @@ StrategySignal Strategies::evaluate_relative_strength(
     return signal;
 }
 
+StrategySignal Strategies::evaluate_volume_surge(const PriceHistory& history) {
+    auto signal = StrategySignal{};
+    signal.strategy_name = "volume_surge";
+
+    // Need volume history and price movement
+    if (history.volumes.size() < 20 or history.prices.size() < 2)
+        return signal;
+
+    auto current_vol = history.volumes.back();
+    auto avg = history.avg_volume();
+
+    // Defensive assertions: validate volume data
+    assert(current_vol >= 0 and "Volume must be non-negative");
+    assert(avg >= 0 and "Average volume must be non-negative");
+
+    if (avg == 0)
+        return signal;
+
+    auto vol_ratio = static_cast<double>(current_vol) / avg;
+    assert(std::isfinite(vol_ratio) and vol_ratio >= 0.0 and "Volume ratio must be non-negative and finite");
+
+    // Volume surge (>2x average) + upward momentum (>0.5%)
+    if (vol_ratio > 2.0 and history.change_percent > 0.5) {
+        signal.should_buy = true;
+        signal.confidence = std::min(vol_ratio / 3.0, 1.0);  // Cap confidence at 3x volume
+        signal.reason = std::format("Volume surge: {:.1f}x avg, +{:.2f}%",
+                                   vol_ratio, history.change_percent);
+    }
+
+    return signal;
+}
+
 } // namespace lft

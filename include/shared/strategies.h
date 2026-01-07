@@ -178,6 +178,9 @@ public:
 
     // Buy on relative strength (compare to market average)
     static StrategySignal evaluate_relative_strength(const PriceHistory&, const std::map<std::string, PriceHistory>&);
+
+    // Buy on volume surge with momentum
+    static StrategySignal evaluate_volume_surge(const PriceHistory&);
 };
 
 } // namespace lft
