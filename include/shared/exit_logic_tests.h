@@ -16,6 +16,27 @@ constexpr auto take_profit_pct = 2_pc;
 constexpr auto stop_loss_pct = 2_pc;
 constexpr auto trailing_stop_pct = 1_pc;
 
+// Noise and signal analysis
+// Minimum signal-to-noise ratio: signal must be at least 3x the noise
+constexpr auto min_signal_to_noise_ratio = 3.0;
+
+// Calculate intrabar noise from OHLC (high-low range as % of close)
+constexpr double bar_noise(double high, double low, double close) {
+  return (high - low) / close;
+}
+
+// Adaptive take profit: widens target when noise is high
+constexpr double adaptive_take_profit(double base_tp, double noise) {
+  auto min_tp = noise * min_signal_to_noise_ratio;
+  return base_tp > min_tp ? base_tp : min_tp;
+}
+
+// Adaptive stop loss: widens stop when noise is high
+constexpr double adaptive_stop_loss(double base_sl, double noise) {
+  auto min_sl = noise * min_signal_to_noise_ratio;
+  return base_sl > min_sl ? base_sl : min_sl;
+}
+
 // Calculate P&L percentage from entry and current price
 constexpr double calc_pl_pct(double entry_price, double current_price) {
   return (current_price - entry_price) / entry_price;
@@ -51,6 +72,48 @@ constexpr double apply_spread(double mid_price, double spread_pct,
 static_assert(calc_pl_pct(100.0, 102.0) == 0.02, "2% gain calculation");
 static_assert(calc_pl_pct(100.0, 98.0) == -0.02, "-2% loss calculation");
 static_assert(calc_pl_pct(100.0, 100.0) == 0.0, "No change calculation");
+
+// Noise calculation tests
+static_assert(bar_noise(102.0, 98.0, 100.0) == 0.04, "4% noise: high=102, low=98, close=100");
+static_assert(bar_noise(100.5, 99.5, 100.0) == 0.01, "1% noise: tight range");
+static_assert(bar_noise(110.0, 90.0, 100.0) == 0.20, "20% noise: very volatile bar");
+static_assert(bar_noise(100.0, 100.0, 100.0) == 0.0, "0% noise: no movement");
+
+// Adaptive TP/SL tests
+// Low noise (0.5%) → use base 2% TP/SL (2% > 1.5%)
+static_assert(adaptive_take_profit(2_pc, 0.005) == 2_pc,
+              "Low noise: use base TP");
+static_assert(adaptive_stop_loss(2_pc, 0.005) == 2_pc,
+              "Low noise: use base SL");
+
+// High noise (1%) → use base 2% TP/SL (2% < 3%)
+static_assert(adaptive_take_profit(2_pc, 0.01) > 0.029 && adaptive_take_profit(2_pc, 0.01) < 0.031,
+              "High noise: widen TP to 3x noise = 3%");
+static_assert(adaptive_stop_loss(2_pc, 0.01) > 0.029 && adaptive_stop_loss(2_pc, 0.01) < 0.031,
+              "High noise: widen SL to 3x noise = 3%");
+
+// Very high noise (2%) → widen significantly (2% < 6%)
+static_assert(adaptive_take_profit(2_pc, 0.02) > 0.059 && adaptive_take_profit(2_pc, 0.02) < 0.061,
+              "Very high noise: widen TP to 6%");
+static_assert(adaptive_stop_loss(2_pc, 0.02) > 0.059 && adaptive_stop_loss(2_pc, 0.02) < 0.061,
+              "Very high noise: widen SL to 6%");
+
+// Edge case: noise exactly at threshold
+// Noise = 0.67% → 3x = 2.0%, equals base
+static_assert(adaptive_take_profit(2_pc, 0.0066667) > 0.0199 && adaptive_take_profit(2_pc, 0.0066667) < 0.0201,
+              "Noise at threshold: use base TP");
+
+// Realistic scenario: AAPL typical 0.3% intrabar range
+// 0.3% noise → 3x = 0.9%, base 2% wins
+constexpr auto aapl_noise = 0.003;
+static_assert(adaptive_take_profit(2_pc, aapl_noise) == 2_pc,
+              "AAPL typical noise: use base TP");
+
+// Volatile scenario: TSLA 1.5% intrabar range
+// 1.5% noise → 3x = 4.5%, wider than base 2%
+constexpr auto tsla_noise = 0.015;
+static_assert(adaptive_take_profit(2_pc, tsla_noise) > 0.044 && adaptive_take_profit(2_pc, tsla_noise) < 0.046,
+              "TSLA volatile: widen TP to 4.5%");
 
 // Take profit tests (2% target)
 static_assert(is_take_profit(100.0, 102.0, 2_pc), "TP at exactly 2%");

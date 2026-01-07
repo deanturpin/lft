@@ -69,7 +69,7 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
                  BacktestStats &stats,
                  const std::map<std::string, lft::StrategyConfig> &configs) {
 
-  history.add_price(bar.close);
+  history.add_bar(bar.close, bar.high, bar.low, bar.volume);
 
   auto has_position = stats.positions.contains(symbol);
 
@@ -158,7 +158,12 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
 
           stats.cash -= actual_cost;
 
+          // Calculate adaptive TP/SL based on recent noise
+          auto recent_noise = history.recent_noise(20);
           const auto &config = configs.at(signal.strategy_name);
+          auto adaptive_tp = adaptive_take_profit(config.take_profit_pct, recent_noise);
+          auto adaptive_sl = adaptive_stop_loss(config.stop_loss_pct, recent_noise);
+
           stats.positions[symbol] =
               Position{.symbol = symbol,
                        .strategy = signal.strategy_name,
@@ -167,8 +172,8 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
                        .entry_time = bar.timestamp,
                        .entry_bar_index = bar_index,
                        .peak_price = bar.close, // Peak tracks mid price
-                       .take_profit_pct = config.take_profit_pct,
-                       .stop_loss_pct = config.stop_loss_pct,
+                       .take_profit_pct = adaptive_tp,      // Use noise-adjusted TP
+                       .stop_loss_pct = adaptive_sl,        // Use noise-adjusted SL
                        .trailing_stop_pct = config.trailing_stop_pct};
 
           ++stats.strategy_stats[signal.strategy_name].trades_executed;

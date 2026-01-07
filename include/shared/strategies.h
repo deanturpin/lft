@@ -13,6 +13,7 @@ struct StrategySignal {
     bool should_buy{false};
     std::string reason;
     std::string strategy_name;
+    double confidence{1.0};  // Signal confidence: 0.0-1.0 (reduced by noise/low volume)
 };
 
 // Strategy-specific exit configuration
@@ -49,6 +50,9 @@ struct StrategyStats {
 // Price history with multiple timeframes
 struct PriceHistory {
     std::vector<double> prices;
+    std::vector<double> highs;     // High prices for noise calculation
+    std::vector<double> lows;      // Low prices for noise calculation
+    std::vector<long> volumes;     // Trading volumes
     double last_price{};
     double change_percent{};
     bool has_history{false};
@@ -64,6 +68,21 @@ struct PriceHistory {
             change_percent = ((price - last_price) / last_price) * 100.0;
             has_history = true;
         }
+    }
+
+    void add_bar(double close, double high, double low, long volume) {
+        add_price(close);
+        highs.push_back(high);
+        lows.push_back(low);
+        volumes.push_back(volume);
+
+        // Keep synced with prices
+        if (highs.size() > 100)
+            highs.erase(highs.begin());
+        if (lows.size() > 100)
+            lows.erase(lows.begin());
+        if (volumes.size() > 100)
+            volumes.erase(volumes.begin());
     }
 
     double moving_average(size_t periods) const {
@@ -90,6 +109,55 @@ struct PriceHistory {
         }
 
         return std::sqrt(variance / prices.size());
+    }
+
+    // Calculate average noise over recent periods (high-low range as % of close)
+    double recent_noise(size_t periods = 20) const {
+        if (highs.size() < periods or lows.size() < periods or prices.size() < periods)
+            return 0.0;
+
+        auto total_noise = 0.0;
+        auto start_idx = prices.size() - periods;
+
+        for (auto i = start_idx; i < prices.size(); ++i) {
+            auto noise = (highs[i] - lows[i]) / prices[i];
+            total_noise += noise;
+        }
+
+        return total_noise / periods;
+    }
+
+    // Calculate average volume
+    long avg_volume() const {
+        if (volumes.empty())
+            return 0;
+
+        auto sum = 0L;
+        for (auto vol : volumes)
+            sum += vol;
+
+        return sum / static_cast<long>(volumes.size());
+    }
+
+    // Volume factor for signal confidence (1.0 = normal, >1.0 = low volume penalty)
+    double volume_factor() const {
+        if (volumes.empty())
+            return 1.0;
+
+        auto current_vol = volumes.back();
+        auto avg = avg_volume();
+
+        if (avg == 0)
+            return 1.0;
+
+        // Low volume (<50% avg) → penalise confidence
+        auto vol_ratio = static_cast<double>(current_vol) / avg;
+        if (vol_ratio < 0.5)
+            return 1.5;  // 50% confidence penalty
+        else if (vol_ratio < 0.75)
+            return 1.2;  // 20% confidence penalty
+        else
+            return 1.0;  // Normal confidence
     }
 };
 
