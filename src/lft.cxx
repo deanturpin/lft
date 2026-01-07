@@ -3,22 +3,25 @@
 #include <algorithm>
 #include <chrono>
 #include <format>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <print>
 #include <set>
+#include <sstream>
 #include <thread>
 #include <vector>
+
+// Include compile-time exit logic tests
+// This header defines: operator""_pc, stock_spread, crypto_spread,
+// take_profit_pct, stop_loss_pct, trailing_stop_pct
+#include "../tests/exit_logic_tests.h"
 
 using namespace std::chrono_literals;
 
 namespace {
-
-// User-defined literal for percentages
-constexpr double operator""_pc(long double x) { return x / 100.0; }
-constexpr double operator""_pc(unsigned long long x) { return x / 100.0; }
 
 // ANSI colour codes
 constexpr auto colour_reset = "\033[0m";
@@ -31,17 +34,11 @@ constexpr auto colour_yellow = "\033[33m";
 constexpr auto dip_threshold = -2_pc;
 constexpr auto notional_amount = 100.0;
 
-// Spread simulation (buy at ask, sell at bid)
-constexpr auto stock_spread = 2.0 / 10000.0;   // 2 basis points = 0.02%
-constexpr auto crypto_spread = 10.0 / 10000.0; // 10 basis points = 0.1%
-
 // Calibration parameters
 constexpr auto calibration_days = 30; // Use last 30 days for better calibration
 
-// Fixed exit parameters (same for all strategies)
-constexpr auto take_profit_pct = 2_pc;
-constexpr auto stop_loss_pct = -2_pc;
-constexpr auto trailing_stop_pct = 0.5_pc;
+// Time-based exit parameter (not in test header as it's not tested)
+constexpr auto max_hold_minutes = 120; // Force exit after 2 hours
 
 // Position tracking for backtest
 struct Position {
@@ -50,6 +47,7 @@ struct Position {
   double entry_price{};
   double quantity{};
   std::string entry_time;
+  std::size_t entry_bar_index{}; // For time-based exit in backtest
   double peak_price{};
   double take_profit_pct{};
   double stop_loss_pct{};
@@ -66,7 +64,7 @@ struct BacktestStats {
 };
 
 void process_bar(const std::string &symbol, const lft::Bar &bar,
-                 lft::PriceHistory &history,
+                 std::size_t bar_index, lft::PriceHistory &history,
                  const std::map<std::string, lft::PriceHistory> &all_histories,
                  BacktestStats &stats,
                  const std::map<std::string, lft::StrategyConfig> &configs) {
@@ -98,9 +96,14 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
     auto trailing_stop_price = pos.peak_price * (1.0 - pos.trailing_stop_pct);
     auto trailing_stop_triggered = sell_price < trailing_stop_price;
 
+    // Check time-based exit (1 bar = 1 minute for 1Min bars)
+    auto bars_held = bar_index - pos.entry_bar_index;
+    auto time_exit_triggered = bars_held >= max_hold_minutes;
+
     // Exit conditions using position-specific parameters
     auto should_exit = pl_pct >= pos.take_profit_pct or
-                       pl_pct <= pos.stop_loss_pct or trailing_stop_triggered;
+                       pl_pct <= -pos.stop_loss_pct or trailing_stop_triggered or
+                       time_exit_triggered;
 
     if (should_exit) {
       stats.cash += current_value;
@@ -162,6 +165,7 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
                        .entry_price = buy_price, // Store actual buy price (ask)
                        .quantity = quantity,
                        .entry_time = bar.timestamp,
+                       .entry_bar_index = bar_index,
                        .peak_price = bar.close, // Peak tracks mid price
                        .take_profit_pct = config.take_profit_pct,
                        .stop_loss_pct = config.stop_loss_pct,
@@ -207,7 +211,7 @@ BacktestStats run_backtest_with_data(
       const auto &bar = bars[i];
       auto &history = price_histories[symbol];
 
-      process_bar(symbol, bar, history, price_histories, stats, configs);
+      process_bar(symbol, bar, i, history, price_histories, stats, configs);
     }
   }
 
@@ -261,17 +265,18 @@ lft::StrategyConfig calibrate_strategy(
 
   {
     auto lock = std::scoped_lock{calibration_print_mutex};
-    std::println("{}🔧 Testing {}...{}", colour_cyan, strategy_name, colour_reset);
+    std::println("{}🔧 Testing {}...{}", colour_cyan, strategy_name,
+                 colour_reset);
   }
 
   // Create config with fixed exit parameters
   auto configs = std::map<std::string, lft::StrategyConfig>{};
-  configs[strategy_name] = lft::StrategyConfig{
-      .name = strategy_name,
-      .enabled = true,
-      .take_profit_pct = take_profit_pct,
-      .stop_loss_pct = stop_loss_pct,
-      .trailing_stop_pct = trailing_stop_pct};
+  configs[strategy_name] =
+      lft::StrategyConfig{.name = strategy_name,
+                          .enabled = true,
+                          .take_profit_pct = take_profit_pct,
+                          .stop_loss_pct = stop_loss_pct,
+                          .trailing_stop_pct = trailing_stop_pct};
 
   auto stats = run_backtest_with_data(symbol_bars, configs);
   auto profit = stats.strategy_stats[strategy_name].net_profit();
@@ -286,9 +291,9 @@ lft::StrategyConfig calibrate_strategy(
   {
     auto lock = std::scoped_lock{calibration_print_mutex};
     auto colour = profit > 0.0 ? colour_green : colour_red;
-    std::println("{}✓ {} Complete: {} signals, {} trades, ${:.2f} P&L, {:.1f}% WR{}",
-                 colour, strategy_name, signals, trades, profit, win_rate,
-                 colour_reset);
+    std::println(
+        "{}✓ {} Complete: {} signals, {} trades, ${:.2f} P&L, {:.1f}% WR{}",
+        colour, strategy_name, signals, trades, profit, win_rate, colour_reset);
   }
 
   return config;
@@ -307,14 +312,17 @@ calibrate_all_strategies(lft::AlpacaClient &client,
   std::println("  Take Profit: {:.1f}%", take_profit_pct * 100.0);
   std::println("  Stop Loss: {:.1f}%", stop_loss_pct * 100.0);
   std::println("  Trailing Stop: {:.1f}%", trailing_stop_pct * 100.0);
+  std::println("  Max Hold Time: {} minutes", max_hold_minutes);
 
   // Fetch historic data ONCE upfront (huge speedup!)
   std::println("\n{}📥 Fetching historic data{}", colour_yellow, colour_reset);
 
-  auto now = std::chrono::system_clock::now();
-  auto days_ago = now - std::chrono::hours(24 * calibration_days);
-  auto start = std::format("{:%Y-%m-%dT%H:%M:%SZ}", days_ago);
-  auto end = std::format("{:%Y-%m-%dT%H:%M:%SZ}", now);
+  // Fetch most recent available data (end at yesterday to avoid "recent SIP
+  // data" restriction)
+  auto yesterday = std::chrono::system_clock::now() - std::chrono::hours(24);
+  auto start_date = yesterday - std::chrono::hours(24 * calibration_days);
+  auto start = std::format("{:%Y-%m-%dT%H:%M:%SZ}", start_date);
+  auto end = std::format("{:%Y-%m-%dT%H:%M:%SZ}", yesterday);
 
   auto all_symbols = stocks;
   all_symbols.insert(all_symbols.end(), crypto.begin(), crypto.end());
@@ -447,6 +455,8 @@ void run_live_trading(
   auto position_strategies = std::map<std::string, std::string>{};
   auto position_configs = std::map<std::string, lft::StrategyConfig>{};
   auto position_peaks = std::map<std::string, double>{};
+  auto position_entry_times =
+      std::map<std::string, std::chrono::system_clock::time_point>{};
   auto existing_positions = std::set<std::string>{};
   auto strategy_stats = std::map<std::string, lft::StrategyStats>{};
 
@@ -537,17 +547,29 @@ void run_live_trading(
             auto trailing_stop_price = peak * (1.0 - config.trailing_stop_pct);
             auto trailing_stop_triggered = current_price < trailing_stop_price;
 
+            // Check time-based exit (approximate: each cycle is ~1 minute)
+            auto time_exit_triggered = false;
+            if (position_entry_times.contains(symbol)) {
+              auto elapsed_seconds =
+                  std::chrono::duration<double>(now - position_entry_times[symbol])
+                      .count();
+              auto minutes_held = static_cast<long long>(elapsed_seconds / 60.0);
+              time_exit_triggered = minutes_held >= max_hold_minutes;
+            }
+
             // Exit using strategy-specific parameters
             auto should_exit = pl_pct >= config.take_profit_pct or
-                               pl_pct <= config.stop_loss_pct or
-                               trailing_stop_triggered;
+                               pl_pct <= -config.stop_loss_pct or
+                               trailing_stop_triggered or time_exit_triggered;
 
             if (should_exit) {
               auto profit_percent = (unrealized_pl / cost_basis) * 100.0;
               auto strategy = position_strategies[symbol];
 
               auto exit_reason = std::string{};
-              if (trailing_stop_triggered)
+              if (time_exit_triggered)
+                exit_reason = "TIME LIMIT";
+              else if (trailing_stop_triggered)
                 exit_reason = "TRAILING STOP";
               else if (unrealized_pl > 0.0)
                 exit_reason = "PROFIT TARGET";
@@ -578,6 +600,7 @@ void run_live_trading(
                 position_strategies.erase(symbol);
                 position_configs.erase(symbol);
                 position_peaks.erase(symbol);
+                position_entry_times.erase(symbol);
               } else {
                 std::println("❌ Failed to close position: {}", symbol);
               }
@@ -613,8 +636,7 @@ void run_live_trading(
 
           // Count signals
           for (const auto &signal : signals) {
-            if (signal.should_buy and
-                configs.contains(signal.strategy_name) and
+            if (signal.should_buy and configs.contains(signal.strategy_name) and
                 configs.at(signal.strategy_name).enabled)
               ++strategy_stats[signal.strategy_name].signals_generated;
           }
@@ -637,6 +659,7 @@ void run_live_trading(
                   existing_positions.insert(symbol);
                   position_strategies[symbol] = signal.strategy_name;
                   position_configs[symbol] = configs.at(signal.strategy_name);
+                  position_entry_times[symbol] = now;
                   ++strategy_stats[signal.strategy_name].trades_executed;
                 } else {
                   std::println("❌ Order failed");
@@ -651,8 +674,9 @@ void run_live_trading(
               if (signal.should_buy and
                   configs.contains(signal.strategy_name) and
                   configs.at(signal.strategy_name).enabled) {
-                std::println("{}⏸  BLOCKED: {} signal for {} (position already open){}",
-                             colour_yellow, signal.strategy_name, symbol, colour_reset);
+                std::println(
+                    "{}⏸  BLOCKED: {} signal for {} (position already open){}",
+                    colour_yellow, signal.strategy_name, symbol, colour_reset);
                 break;
               }
             }
@@ -681,8 +705,7 @@ void run_live_trading(
 
           // Count signals
           for (const auto &signal : signals) {
-            if (signal.should_buy and
-                configs.contains(signal.strategy_name) and
+            if (signal.should_buy and configs.contains(signal.strategy_name) and
                 configs.at(signal.strategy_name).enabled)
               ++strategy_stats[signal.strategy_name].signals_generated;
           }
@@ -705,6 +728,7 @@ void run_live_trading(
                   existing_positions.insert(symbol);
                   position_strategies[symbol] = signal.strategy_name;
                   position_configs[symbol] = configs.at(signal.strategy_name);
+                  position_entry_times[symbol] = now;
                   ++strategy_stats[signal.strategy_name].trades_executed;
                 } else {
                   std::println("❌ Order failed");
@@ -719,8 +743,9 @@ void run_live_trading(
               if (signal.should_buy and
                   configs.contains(signal.strategy_name) and
                   configs.at(signal.strategy_name).enabled) {
-                std::println("{}⏸  BLOCKED: {} signal for {} (position already open){}",
-                             colour_yellow, signal.strategy_name, symbol, colour_reset);
+                std::println(
+                    "{}⏸  BLOCKED: {} signal for {} (position already open){}",
+                    colour_yellow, signal.strategy_name, symbol, colour_reset);
                 break;
               }
             }
@@ -735,8 +760,9 @@ void run_live_trading(
     // Calculate cycles remaining
     auto cycles_remaining = max_cycles - cycle;
 
-    std::println("\n⏳ Next update in 60 seconds | {} cycles until re-calibration\n",
-                 cycles_remaining);
+    std::println(
+        "\n⏳ Next update in 60 seconds | {} cycles until re-calibration\n",
+        cycles_remaining);
     std::this_thread::sleep_for(60s);
   }
 }
@@ -755,10 +781,30 @@ int main() {
   std::println("Calibrate → Execute Workflow\n");
 
   // Same watchlist as live ticker
-  auto stocks = std::vector<std::string>{"AAPL",  "TSLA", "NVDA", "MSFT",
-                                         "GOOGL", "AMZN", "META"};
-  auto crypto =
-      std::vector<std::string>{"BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD"};
+  auto stocks = std::vector<std::string>{
+      "AAPL",  "TSLA", "NVDA", "MSFT", "GOOGL", "AMZN", "META",
+      "BRK.B", // Berkshire Hathaway (diversified value)
+      "JPM",   // Financials
+      "JNJ",   // Healthcare
+      "PG",    // Consumer staples
+      "XOM",   // Energy
+      "ASML",  // EU semiconductors
+      "TSM",   // Taiwan Semiconductor
+      "NVO",   // Healthcare (Denmark)
+      "SAP",   // European software
+      "BABA",  // China e-commerce
+      "GLD",   // Gold
+      "TLT",   // Long-term US bonds
+      "IEF",   // Mid-term bonds
+      "VNQ"    // Real estate
+  };
+
+  auto crypto = std::vector<std::string>{
+      "BTC/USD",  "ETH/USD", "SOL/USD", "DOGE/USD",
+      "LINK/USD", // Oracles
+      "AVAX/USD", // Alternative L1
+      "ATOM/USD", // Cosmos ecosystem
+  };
 
   // Phase 1: Calibrate
   auto configs = calibrate_all_strategies(client, stocks, crypto);
