@@ -452,7 +452,53 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
                colour_reset);
 }
 
-void print_account_stats(lft::AlpacaClient &client) {
+// Check if US stock market is open and time until open/close
+struct MarketStatus {
+  bool is_open{};
+  std::string message;
+};
+
+MarketStatus get_market_status(const std::chrono::system_clock::time_point &now) {
+  // Convert to time_t for easier manipulation
+  auto now_t = std::chrono::system_clock::to_time_t(now);
+  auto et_time = std::gmtime(&now_t); // Use GMT, will adjust manually for ET
+
+  // US Eastern Time is UTC-5 (EST) or UTC-4 (EDT)
+  // For simplicity, assume EDT (UTC-4) year-round
+  // Note: Proper implementation should handle DST transitions
+  auto et_hour = (et_time->tm_hour - 4 + 24) % 24;
+  auto et_min = et_time->tm_min;
+  auto weekday = et_time->tm_wday; // 0=Sunday, 6=Saturday
+
+  // Market closed on weekends
+  if (weekday == 0 or weekday == 6)
+    return {false, "Market CLOSED (weekend)"};
+
+  // Market hours: 9:30 AM - 4:00 PM ET (09:30 - 16:00)
+  auto current_minutes = et_hour * 60 + et_min;
+  constexpr auto market_open = 9 * 60 + 30;  // 9:30 AM
+  constexpr auto market_close = 16 * 60;     // 4:00 PM
+
+  if (current_minutes >= market_open and current_minutes < market_close) {
+    auto mins_until_close = market_close - current_minutes;
+    auto hours = mins_until_close / 60;
+    auto mins = mins_until_close % 60;
+    return {true, std::format("Market OPEN - {}h {}m until close", hours, mins)};
+  } else if (current_minutes < market_open) {
+    auto mins_until_open = market_open - current_minutes;
+    auto hours = mins_until_open / 60;
+    auto mins = mins_until_open % 60;
+    return {false, std::format("Market CLOSED - {}h {}m until open", hours, mins)};
+  } else {
+    // After market close, calculate time until next day's open
+    auto mins_until_tomorrow = (24 * 60 - current_minutes) + market_open;
+    auto hours = mins_until_tomorrow / 60;
+    auto mins = mins_until_tomorrow % 60;
+    return {false, std::format("Market CLOSED - {}h {}m until open", hours, mins)};
+  }
+}
+
+void print_account_stats(lft::AlpacaClient &client, const std::chrono::system_clock::time_point &now) {
   auto account_result = client.get_account();
   if (not account_result)
     return;
@@ -472,6 +518,11 @@ void print_account_stats(lft::AlpacaClient &client) {
   std::println("Equity:        ${:>12.2f}", equity);
   std::println("Portfolio:     ${:>12.2f}", portfolio_value);
   std::println("Buying Power:  ${:>12.2f}", buying_power);
+
+  // Market status
+  auto market_status = get_market_status(now);
+  auto status_colour = market_status.is_open ? colour_green : colour_red;
+  std::println("{}{}{}",status_colour, market_status.message, colour_reset);
 
   // Warn if low balance
   if (cash < notional_amount) {
@@ -543,7 +594,7 @@ void run_live_trading(
     std::println("{:-<70}", "");
 
     // Display account status
-    print_account_stats(client);
+    print_account_stats(client, now);
 
     // Fetch and process positions
     auto positions_result = client.get_positions();
