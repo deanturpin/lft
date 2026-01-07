@@ -39,8 +39,8 @@ constexpr auto crypto_spread = 10.0 / 10000.0; // 10 basis points = 0.1%
 constexpr auto calibration_days = 30; // Use last 30 days for better calibration
 
 // Fixed exit parameters (same for all strategies)
-constexpr auto take_profit_pct = 1_pc;
-constexpr auto stop_loss_pct = -1_pc;
+constexpr auto take_profit_pct = 2_pc;
+constexpr auto stop_loss_pct = -2_pc;
 constexpr auto trailing_stop_pct = 0.5_pc;
 
 // Position tracking for backtest

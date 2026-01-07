@@ -20,8 +20,8 @@ A C++23 multi-strategy automated trading system for US stocks and crypto.
 5. **Relative Strength** - Outperformance vs market basket by >0.5%
 
 **Exit Parameters** (1:1 risk/reward)
-- Take Profit: 1%
-- Stop Loss: -1%
+- Take Profit: 2%
+- Stop Loss: -2%
 - Trailing Stop: 0.5%
 
 ## Quick Start
