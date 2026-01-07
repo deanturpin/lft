@@ -89,6 +89,7 @@ void print_summary(const BacktestStats &stats) {
   std::println("");
 }
 
+// has all this been copied into lft?
 void process_bar(const std::string &symbol, const lft::Bar &bar,
                  lft::PriceHistory &history,
                  const std::map<std::string, lft::PriceHistory> &all_histories,
@@ -274,6 +275,7 @@ int main() {
       if (i >= bars.size())
         continue;
 
+      // could we just go for auto and let the compiler sort it out?
       const auto &bar = bars[i];
       auto &history = price_histories[symbol];
 

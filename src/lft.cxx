@@ -34,13 +34,10 @@ constexpr auto crypto_spread_bps = 10.0; // 10 basis points = 0.1%
 // Calibration parameters
 constexpr auto calibration_days = 30; // Use last 30 days for better calibration
 
-// Grid search ranges for exit parameters
-constexpr auto take_profit_candidates =
-    std::array{0.005, 0.01, 0.015, 0.02}; // 0.5% to 2%
-constexpr auto stop_loss_candidates =
-    std::array{-0.02, -0.03, -0.04, -0.05}; // -2% to -5%
-constexpr auto trailing_stop_candidates =
-    std::array{0.01, 0.015, 0.02, 0.025}; // 1% to 2.5%
+// Fixed exit parameters (same for all strategies)
+constexpr auto take_profit_pct = 0.01;   // 1%
+constexpr auto stop_loss_pct = -0.06;    // -6%
+constexpr auto trailing_stop_pct = 0.02; // 2%
 
 // Position tracking for backtest
 struct Position {
@@ -64,7 +61,6 @@ struct BacktestStats {
   int losing_trades{};
 };
 
-// Process single bar during backtest
 void process_bar(const std::string &symbol, const lft::Bar &bar,
                  lft::PriceHistory &history,
                  const std::map<std::string, lft::PriceHistory> &all_histories,
@@ -123,6 +119,7 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
   } else {
     // Evaluate entry strategies
     auto signals = std::vector<lft::StrategySignal>{
+        // is this history of all assets?
         lft::Strategies::evaluate_dip(history, dip_threshold),
         lft::Strategies::evaluate_ma_crossover(history),
         lft::Strategies::evaluate_mean_reversion(history),
@@ -177,6 +174,8 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
 }
 
 // Run backtest with pre-fetched data (fast - for calibration)
+
+// why backtests mentions here?
 BacktestStats run_backtest_with_data(
     const std::map<std::string, std::vector<lft::Bar>> &symbol_bars,
     const std::map<std::string, lft::StrategyConfig> &configs) {
@@ -253,91 +252,44 @@ BacktestStats run_backtest_with_data(
 // Mutex for thread-safe printing during parallel calibration
 std::mutex calibration_print_mutex;
 
-// Calibrate optimal exit parameters for a single strategy (with pre-fetched
-// data)
+// Test strategy with fixed exit parameters
 lft::StrategyConfig calibrate_strategy(
     const std::string &strategy_name,
     const std::map<std::string, std::vector<lft::Bar>> &symbol_bars) {
 
-  auto total_combinations = take_profit_candidates.size() *
-                            stop_loss_candidates.size() *
-                            trailing_stop_candidates.size();
+  {
+    auto lock = std::scoped_lock{calibration_print_mutex};
+    std::println("{}🔧 Testing {}...{}", colour_cyan, strategy_name, colour_reset);
+  }
+
+  // Create config with fixed exit parameters
+  auto configs = std::map<std::string, lft::StrategyConfig>{};
+  configs[strategy_name] = lft::StrategyConfig{
+      .name = strategy_name,
+      .enabled = true,
+      .take_profit_pct = take_profit_pct,
+      .stop_loss_pct = stop_loss_pct,
+      .trailing_stop_pct = trailing_stop_pct};
+
+  auto stats = run_backtest_with_data(symbol_bars, configs);
+  auto profit = stats.strategy_stats[strategy_name].net_profit();
+  auto trades = stats.strategy_stats[strategy_name].trades_closed;
+  auto signals = stats.strategy_stats[strategy_name].signals_generated;
+  auto win_rate = stats.strategy_stats[strategy_name].win_rate();
+
+  auto config = configs[strategy_name];
+  config.net_profit = profit;
+  config.win_rate = win_rate;
 
   {
     auto lock = std::scoped_lock{calibration_print_mutex};
-    std::println("\n{}🔧 Calibrating {} ({} combinations)...{}", colour_cyan,
-                 strategy_name, total_combinations, colour_reset);
+    auto colour = profit > 0.0 ? colour_green : colour_red;
+    std::println("{}✓ {} Complete: {} signals, {} trades, ${:.2f} P&L, {:.1f}% WR{}",
+                 colour, strategy_name, signals, trades, profit, win_rate,
+                 colour_reset);
   }
 
-  auto best_config = lft::StrategyConfig{};
-  best_config.name = strategy_name;
-  auto best_profit = -999999.0;
-  auto worst_profit = 999999.0;
-  auto tested = 0uz;
-
-  // Grid search
-  for (auto tp : take_profit_candidates) {
-    for (auto sl : stop_loss_candidates) {
-      for (auto ts : trailing_stop_candidates) {
-        ++tested;
-
-        // Create config with only this strategy enabled
-        auto configs = std::map<std::string, lft::StrategyConfig>{};
-        configs[strategy_name] = lft::StrategyConfig{.name = strategy_name,
-                                                     .enabled = true,
-                                                     .take_profit_pct = tp,
-                                                     .stop_loss_pct = sl,
-                                                     .trailing_stop_pct = ts};
-
-        auto stats = run_backtest_with_data(symbol_bars, configs);
-        auto profit = stats.strategy_stats[strategy_name].net_profit();
-        auto trades = stats.strategy_stats[strategy_name].trades_closed;
-        auto signals = stats.strategy_stats[strategy_name].signals_generated;
-
-        if (profit > best_profit) {
-          best_profit = profit;
-          best_config = configs[strategy_name];
-          best_config.net_profit = profit;
-          best_config.win_rate = stats.strategy_stats[strategy_name].win_rate();
-        }
-
-        if (profit < worst_profit)
-          worst_profit = profit;
-
-        // Debug first and last iteration
-        if (tested == 1 or tested == total_combinations) {
-          auto lock = std::scoped_lock{calibration_print_mutex};
-          std::println("  {} test {}: {} signals, {} trades, ${:.2f} P&L "
-                       "(TP={:.1f}% SL={:.1f}% TS={:.1f}%)",
-                       strategy_name, tested, signals, trades, profit,
-                       tp * 100.0, sl * 100.0, ts * 100.0);
-        }
-
-        // Progress every 8 tests (show ~8 updates per strategy)
-        if (tested % 8 == 0 or tested == total_combinations) {
-          auto lock = std::scoped_lock{calibration_print_mutex};
-          std::println("  [{}/{}] {} - Current best: ${:.2f}", tested,
-                       total_combinations, strategy_name, best_profit);
-        }
-      }
-    }
-  }
-
-  {
-    auto lock = std::scoped_lock{calibration_print_mutex};
-    auto colour = best_profit > 0.0 ? colour_green : colour_red;
-
-    std::println("{}✓ {} Complete: Best=${:.2f} Worst=${:.2f} Range=${:.2f}{}",
-                 colour, strategy_name, best_profit, worst_profit,
-                 best_profit - worst_profit, colour_reset);
-    std::println(
-        "   Optimal: TP={:.1f}% SL={:.1f}% TS={:.1f}% → P&L=${:.2f} WR={:.1f}%",
-        best_config.take_profit_pct * 100.0, best_config.stop_loss_pct * 100.0,
-        best_config.trailing_stop_pct * 100.0, best_profit,
-        best_config.win_rate);
-  }
-
-  return best_config;
+  return config;
 }
 
 // Run calibration phase
@@ -347,12 +299,12 @@ calibrate_all_strategies(lft::AlpacaClient &client,
                          const std::vector<std::string> &crypto) {
 
   std::println("\n{}🎯 CALIBRATION PHASE{}", colour_cyan, colour_reset);
-  std::println("Testing last {} days of data with grid search",
+  std::println("Testing last {} days of data with fixed exit parameters",
                calibration_days);
-  std::println("Parameter ranges:");
-  std::println("  Take Profit: 0.5% to 2.0%");
-  std::println("  Stop Loss: -2% to -5%");
-  std::println("  Trailing Stop: 1% to 2.5%");
+  std::println("Exit parameters:");
+  std::println("  Take Profit: {:.1f}%", take_profit_pct * 100.0);
+  std::println("  Stop Loss: {:.1f}%", stop_loss_pct * 100.0);
+  std::println("  Trailing Stop: {:.1f}%", trailing_stop_pct * 100.0);
 
   // Fetch historic data ONCE upfront (huge speedup!)
   std::println("\n{}📥 Fetching historic data{}", colour_yellow, colour_reset);
@@ -574,9 +526,9 @@ void run_live_trading(
             else if (current_price > position_peaks[symbol])
               position_peaks[symbol] = current_price;
 
-            // Check trailing stop
+            // Check trailing stop (price falls below peak by trailing_stop_pct)
             auto peak = position_peaks[symbol];
-            auto trailing_stop_price = peak * (1.0 + config.trailing_stop_pct);
+            auto trailing_stop_price = peak * (1.0 - config.trailing_stop_pct);
             auto trailing_stop_triggered = current_price < trailing_stop_price;
 
             // Exit using strategy-specific parameters
@@ -773,7 +725,8 @@ int main() {
   // Same watchlist as live ticker
   auto stocks = std::vector<std::string>{"AAPL",  "TSLA", "NVDA", "MSFT",
                                          "GOOGL", "AMZN", "META"};
-  auto crypto = std::vector<std::string>{"BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD"};
+  auto crypto =
+      std::vector<std::string>{"BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD"};
 
   // Phase 1: Calibrate
   auto configs = calibrate_all_strategies(client, stocks, crypto);
