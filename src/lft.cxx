@@ -304,9 +304,9 @@ calibrate_all_strategies(lft::AlpacaClient &client,
   std::println("Testing last {} days of data with fixed exit parameters",
                calibration_days);
   std::println("Exit parameters:");
-  std::println("  Take Profit: {:.1f}%", take_profit_pct * 100.0);
-  std::println("  Stop Loss: {:.1f}%", stop_loss_pct * 100.0);
-  std::println("  Trailing Stop: {:.1f}%", trailing_stop_pct * 100.0);
+  std::println("  Take Profit: {:.1f}%", take_profit_pct * 100_pc);
+  std::println("  Stop Loss: {:.1f}%", stop_loss_pct * 100_pc);
+  std::println("  Trailing Stop: {:.1f}%", trailing_stop_pct * 100_pc);
 
   // Fetch historic data ONCE upfront (huge speedup!)
   std::println("\n{}📥 Fetching historic data{}", colour_yellow, colour_reset);
@@ -494,7 +494,7 @@ void run_live_trading(
             auto market_value =
                 std::stod(pos["market_value"].get<std::string>());
             auto unrealized_plpc =
-                std::stod(pos["unrealized_plpc"].get<std::string>()) * 100.0;
+                std::stod(pos["unrealized_plpc"].get<std::string>()) * 100_pc;
 
             auto colour = unrealized_plpc >= 0.0 ? colour_green : colour_red;
             auto strategy = position_strategies.contains(symbol)
@@ -543,7 +543,7 @@ void run_live_trading(
                                trailing_stop_triggered;
 
             if (should_exit) {
-              auto profit_percent = (unrealized_pl / cost_basis) * 100.0;
+              auto profit_percent = (unrealized_pl / cost_basis) * 100_pc;
               auto strategy = position_strategies[symbol];
 
               auto exit_reason = std::string{};
