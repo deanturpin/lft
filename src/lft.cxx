@@ -25,7 +25,7 @@ constexpr auto colour_yellow = "\033[33m";
 
 // Trading parameters
 constexpr auto dip_threshold = -0.2;
-constexpr auto notional_amount = 50.0;
+constexpr auto notional_amount = 100.0;
 
 // Spread simulation (buy at ask, sell at bid)
 constexpr auto stock_spread_bps = 2.0;   // 2 basis points = 0.02%
@@ -35,9 +35,9 @@ constexpr auto crypto_spread_bps = 10.0; // 10 basis points = 0.1%
 constexpr auto calibration_days = 30; // Use last 30 days for better calibration
 
 // Fixed exit parameters (same for all strategies)
-constexpr auto take_profit_pct = 0.01;   // 1%
-constexpr auto stop_loss_pct = -0.06;    // -6%
-constexpr auto trailing_stop_pct = 0.02; // 2%
+constexpr auto take_profit_pct = 0.02;   // 2%
+constexpr auto stop_loss_pct = -0.02;    // -2%
+constexpr auto trailing_stop_pct = 0.015; // 1.5%
 
 // Position tracking for backtest
 struct Position {
