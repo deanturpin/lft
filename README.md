@@ -13,7 +13,7 @@ A C++23 multi-strategy automated trading system for US stocks and crypto.
 - 7 stocks and 4 crypto assets
 
 **Trading Strategies**
-1. **Dip Buying** - Entry on 0.2% price drops
+1. **Dip Buying** - Entry on 2% price drops
 2. **MA Crossover** - 5-period crosses 20-period moving average
 3. **Mean Reversion** - Price >2 standard deviations below MA
 4. **Volatility Breakout** - Expansion from compression with volume

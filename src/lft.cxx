@@ -28,7 +28,7 @@ constexpr auto colour_cyan = "\033[36m";
 constexpr auto colour_yellow = "\033[33m";
 
 // Trading parameters
-constexpr auto dip_threshold = -0.2_pc;
+constexpr auto dip_threshold = -2_pc;
 constexpr auto notional_amount = 100.0;
 
 // Spread simulation (buy at ask, sell at bid)
