@@ -167,6 +167,135 @@ static_assert(crypto_pl_102 > 0.0189 && crypto_pl_102 < 0.0191,
 static_assert(!is_take_profit(crypto_entry, crypto_sell_102, 2_pc),
               "2% mid move doesn't trigger TP for crypto due to larger spread");
 
+// ============================================================================
+// REALISTIC PRICE SEQUENCE TESTS
+// Test complete trading scenarios with actual price movements
+// ============================================================================
+
+// Scenario 1: TAKE PROFIT - Stock rises to exactly trigger 2% TP
+// Entry at $100 mid → buy at ask $100.01
+// Need ~2.02% mid move for 2% net P&L after spread
+// Price rises to $102.0306 mid → sell at bid $102.0204
+// P&L = (102.0204 - 100.01) / 100.01 ≈ 2.01%
+constexpr auto scenario1_entry_mid = 100.0;
+constexpr auto scenario1_entry_price = apply_spread(scenario1_entry_mid, stock_spread, true);
+constexpr auto scenario1_exit_mid = 102.0306;
+constexpr auto scenario1_exit_price = apply_spread(scenario1_exit_mid, stock_spread, false);
+constexpr auto scenario1_pl = calc_pl_pct(scenario1_entry_price, scenario1_exit_price);
+
+static_assert(scenario1_entry_price > 100.009 && scenario1_entry_price < 100.011,
+              "Scenario 1: Entry at ask ~100.01");
+static_assert(scenario1_exit_price > 102.019 && scenario1_exit_price < 102.022,
+              "Scenario 1: Exit at bid ~102.0204");
+static_assert(scenario1_pl >= 0.020 && scenario1_pl < 0.0202,
+              "Scenario 1: Achieves ~2% P&L");
+static_assert(is_take_profit(scenario1_entry_price, scenario1_exit_price, 2_pc),
+              "Scenario 1: Take profit triggers");
+
+// Scenario 2: STOP LOSS - Stock falls to exactly trigger -2% SL
+// Entry at $100 mid → buy at ask $100.01
+// Price falls to $97.9796 mid → sell at bid $97.9696
+// P&L = (97.9696 - 100.01) / 100.01 = -2.0404 / 100.01 ≈ -2.04%
+constexpr auto scenario2_entry_mid = 100.0;
+constexpr auto scenario2_entry_price = apply_spread(scenario2_entry_mid, stock_spread, true);
+constexpr auto scenario2_exit_mid = 97.9796;
+constexpr auto scenario2_exit_price = apply_spread(scenario2_exit_mid, stock_spread, false);
+constexpr auto scenario2_pl = calc_pl_pct(scenario2_entry_price, scenario2_exit_price);
+
+static_assert(scenario2_pl < -0.0199 && scenario2_pl > -0.0210,
+              "Scenario 2: ~-2% loss");
+static_assert(is_stop_loss(scenario2_entry_price, scenario2_exit_price, 2_pc),
+              "Scenario 2: Stop loss triggers");
+
+// Scenario 3: TRAILING STOP - Stock peaks then falls 1% from peak
+// Entry at $100 mid → buy at ask $100.01
+// Peak at $105 mid
+// Falls to $103.94 mid → sell at bid $103.9296
+// Trailing stop price = 105 * 0.99 = 103.95
+// Sell price 103.9296 < 103.95, so trailing stop triggers
+// P&L = (103.9296 - 100.01) / 100.01 ≈ 3.92%
+// Note: This also triggers take profit (>2%), but trailing stop detected it first
+constexpr auto scenario3_entry_mid = 100.0;
+constexpr auto scenario3_entry_price = apply_spread(scenario3_entry_mid, stock_spread, true);
+constexpr auto scenario3_peak_mid = 105.0;
+constexpr auto scenario3_exit_mid = 103.94;
+constexpr auto scenario3_exit_price = apply_spread(scenario3_exit_mid, stock_spread, false);
+constexpr auto scenario3_pl = calc_pl_pct(scenario3_entry_price, scenario3_exit_price);
+
+static_assert(scenario3_pl > 0.039 && scenario3_pl < 0.040,
+              "Scenario 3: ~3.92% gain before trailing stop");
+static_assert(is_trailing_stop(scenario3_peak_mid, scenario3_exit_price, 1_pc),
+              "Scenario 3: Trailing stop triggers at 1% below peak");
+static_assert(is_take_profit(scenario3_entry_price, scenario3_exit_price, 2_pc),
+              "Scenario 3: Also exceeds take profit (but trailing stop wins)");
+
+// Scenario 4: NEAR MISS - Stock rises to 1.99%, doesn't trigger TP
+// Entry at $100 mid → buy at ask $100.01
+// Price rises to $101.99 mid → sell at bid $101.9799
+// P&L = (101.9799 - 100.01) / 100.01 ≈ 1.969%
+constexpr auto scenario4_entry_mid = 100.0;
+constexpr auto scenario4_entry_price = apply_spread(scenario4_entry_mid, stock_spread, true);
+constexpr auto scenario4_exit_mid = 101.99;
+constexpr auto scenario4_exit_price = apply_spread(scenario4_exit_mid, stock_spread, false);
+constexpr auto scenario4_pl = calc_pl_pct(scenario4_entry_price, scenario4_exit_price);
+
+static_assert(scenario4_pl > 0.0196 && scenario4_pl < 0.0198,
+              "Scenario 4: ~1.97% gain");
+static_assert(!is_take_profit(scenario4_entry_price, scenario4_exit_price, 2_pc),
+              "Scenario 4: Take profit does NOT trigger (below 2%)");
+static_assert(!is_stop_loss(scenario4_entry_price, scenario4_exit_price, 2_pc),
+              "Scenario 4: Stop loss does NOT trigger");
+
+// Scenario 5: CRYPTO with larger spread - 2% move insufficient
+// Entry at $1000 mid → buy at ask $1000.50
+// Price rises to $1020 mid → sell at bid $1019.49 (10bp = 0.1% spread)
+// P&L = (1019.49 - 1000.50) / 1000.50 ≈ 1.898%
+constexpr auto scenario5_entry_mid = 1000.0;
+constexpr auto scenario5_entry_price = apply_spread(scenario5_entry_mid, crypto_spread, true);
+constexpr auto scenario5_exit_mid = 1020.0;
+constexpr auto scenario5_exit_price = apply_spread(scenario5_exit_mid, crypto_spread, false);
+constexpr auto scenario5_pl = calc_pl_pct(scenario5_entry_price, scenario5_exit_price);
+
+static_assert(scenario5_entry_price > 1000.49 && scenario5_entry_price < 1000.51,
+              "Scenario 5: Crypto entry at ask ~1000.50");
+static_assert(scenario5_exit_price > 1019.48 && scenario5_exit_price < 1019.50,
+              "Scenario 5: Crypto exit at bid ~1019.49");
+static_assert(scenario5_pl > 0.0189 && scenario5_pl < 0.0191,
+              "Scenario 5: Crypto 2% mid move = ~1.9% P&L");
+static_assert(!is_take_profit(scenario5_entry_price, scenario5_exit_price, 2_pc),
+              "Scenario 5: Crypto 2% move insufficient for TP due to larger spread");
+
+// Scenario 6: Trailing stop edge case - exactly at threshold
+// Entry at $100 mid → buy at ask $100.01
+// Peak at $105 mid
+// Falls to exactly $103.95 mid → sell at bid $103.9399
+// Trailing stop price = 105 * 0.99 = 103.95
+// Sell price 103.9399 < 103.95, triggers (boundary condition)
+constexpr auto scenario6_entry_mid = 100.0;
+constexpr auto scenario6_entry_price = apply_spread(scenario6_entry_mid, stock_spread, true);
+constexpr auto scenario6_peak_mid = 105.0;
+constexpr auto scenario6_exit_mid = 103.95;
+constexpr auto scenario6_exit_price = apply_spread(scenario6_exit_mid, stock_spread, false);
+
+static_assert(is_trailing_stop(scenario6_peak_mid, scenario6_exit_price, 1_pc),
+              "Scenario 6: Trailing stop triggers at exact boundary");
+
+// Scenario 7: Multiple peaks - trailing stop uses highest peak
+// Entry at $100, peaks at $103, falls to $102, peaks at $106, falls to $105
+// Final trailing stop based on $106 peak = 106 * 0.99 = 104.94
+// If price is $105 mid → sell at bid $104.9895
+// 104.9895 > 104.94, so no trigger yet
+// But if we used lower peak $103, threshold would be 101.97, wouldn't trigger either
+constexpr auto scenario7_peak1 = 103.0;
+constexpr auto scenario7_peak2 = 106.0;
+constexpr auto scenario7_current_mid = 105.0;
+constexpr auto scenario7_sell_price = apply_spread(scenario7_current_mid, stock_spread, false);
+
+static_assert(!is_trailing_stop(scenario7_peak2, scenario7_sell_price, 1_pc),
+              "Scenario 7: No trigger when 0.96% below peak");
+static_assert(!is_trailing_stop(scenario7_peak1, scenario7_sell_price, 1_pc),
+              "Scenario 7: Also no trigger from lower peak (104.99 > 101.97)");
+
 } // anonymous namespace
 
 // No main function needed - this file is only for compile-time tests
