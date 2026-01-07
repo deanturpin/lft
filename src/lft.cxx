@@ -459,45 +459,47 @@ struct MarketStatus {
 };
 
 MarketStatus get_market_status(const std::chrono::system_clock::time_point &now) {
-  // Convert to time_t for easier manipulation
-  auto now_t = std::chrono::system_clock::to_time_t(now);
+  using namespace std::chrono;
+
+  // Convert to time_t to get weekday
+  auto now_t = system_clock::to_time_t(now);
   auto utc_time = std::gmtime(&now_t);
-
-  // US Eastern Time: UTC-5 (EST, Nov-Mar) or UTC-4 (EDT, Mar-Nov)
-  // Simple DST check: EDT roughly Mar-Nov (months 3-10)
-  auto month = utc_time->tm_mon; // 0=Jan, 11=Dec
-  auto is_dst = (month >= 2 and month <= 9); // Mar-Oct (EDT)
-  auto utc_offset = is_dst ? 4 : 5; // EDT or EST
-
-  auto et_hour = (utc_time->tm_hour - utc_offset + 24) % 24;
-  auto et_min = utc_time->tm_min;
-  auto weekday = utc_time->tm_wday; // 0=Sunday, 6=Saturday
+  auto weekday = utc_time->tm_wday;
 
   // Market closed on weekends
   if (weekday == 0 or weekday == 6)
     return {false, "Market CLOSED (weekend)"};
 
-  // Market hours: 9:30 AM - 4:00 PM ET (09:30 - 16:00)
-  auto current_minutes = et_hour * 60 + et_min;
-  constexpr auto market_open = 9 * 60 + 30;  // 9:30 AM
-  constexpr auto market_close = 16 * 60;     // 4:00 PM
+  // US Eastern Time offset (simplified DST: EST=UTC-5, EDT=UTC-4)
+  auto month = utc_time->tm_mon;
+  auto is_dst = (month >= 2 and month <= 9); // Mar-Oct = EDT
+  auto et_offset = hours{is_dst ? -4 : -5};
 
-  if (current_minutes >= market_open and current_minutes < market_close) {
-    auto mins_until_close = market_close - current_minutes;
-    auto hours = mins_until_close / 60;
-    auto mins = mins_until_close % 60;
-    return {true, std::format("Market OPEN - {}h {}m until close", hours, mins)};
-  } else if (current_minutes < market_open) {
-    auto mins_until_open = market_open - current_minutes;
-    auto hours = mins_until_open / 60;
-    auto mins = mins_until_open % 60;
-    return {false, std::format("Market CLOSED - {}h {}m until open", hours, mins)};
+  // Get current time in ET
+  auto et_now = now + et_offset;
+  auto et_time_t = system_clock::to_time_t(et_now);
+  auto et_tm = std::gmtime(&et_time_t);
+
+  auto current_time = hours{et_tm->tm_hour} + minutes{et_tm->tm_min};
+  constexpr auto market_open = 9h + 30min;  // 9:30 AM ET
+  constexpr auto market_close = 16h;         // 4:00 PM ET
+
+  if (current_time >= market_open and current_time < market_close) {
+    auto time_until_close = market_close - current_time;
+    auto h = duration_cast<hours>(time_until_close).count();
+    auto m = duration_cast<minutes>(time_until_close % 1h).count();
+    return {true, std::format("Market OPEN - {}h {}m until close", h, m)};
+  } else if (current_time < market_open) {
+    auto time_until_open = market_open - current_time;
+    auto h = duration_cast<hours>(time_until_open).count();
+    auto m = duration_cast<minutes>(time_until_open % 1h).count();
+    return {false, std::format("Market CLOSED - {}h {}m until open", h, m)};
   } else {
-    // After market close, calculate time until next day's open
-    auto mins_until_tomorrow = (24 * 60 - current_minutes) + market_open;
-    auto hours = mins_until_tomorrow / 60;
-    auto mins = mins_until_tomorrow % 60;
-    return {false, std::format("Market CLOSED - {}h {}m until open", hours, mins)};
+    // After close - time until tomorrow's open
+    auto time_until_tomorrow = (24h - current_time) + market_open;
+    auto h = duration_cast<hours>(time_until_tomorrow).count();
+    auto m = duration_cast<minutes>(time_until_tomorrow % 1h).count();
+    return {false, std::format("Market CLOSED - {}h {}m until open", h, m)};
   }
 }
 
