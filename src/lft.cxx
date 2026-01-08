@@ -1008,6 +1008,15 @@ int main() {
     std::println("{}⚠ No profitable strategies - will only manage exits{}\n",
                  colour_yellow, colour_reset);
 
+  // 10-second countdown before live trading starts
+  std::println("\n{}⚠ STARTING LIVE TRADING IN 10 SECONDS - Press Ctrl+C to cancel{}",
+               colour_yellow, colour_reset);
+  for (auto i = 10; i > 0; --i) {
+    std::println("{}...", i);
+    std::this_thread::sleep_for(1s);
+  }
+  std::println("{}🚀 GO!{}\n", colour_green, colour_reset);
+
   // Phase 2: Live trading (runs for 1 hour, then exits)
   run_live_trading(client, stocks, crypto, configs);
 
