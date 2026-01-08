@@ -425,11 +425,7 @@ void print_header() {
 
 void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
                     lft::PriceHistory &history) {
-  // Alert thresholds: crypto is much more volatile than stocks
-  // Note: change_percent is already in percent form (e.g., 2.5 for 2.5%), so use raw values
   auto is_crypto = symbol.find('/') != std::string::npos;
-  auto alert_threshold = is_crypto ? 5.0 : 2.0;  // 5% for crypto, 2% for stocks
-
   auto status = std::string{};
   auto colour = colour_reset;
 
@@ -441,7 +437,10 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
     else if (history.change_percent < 0.0)
       colour = colour_red;
 
-    if (std::abs(history.change_percent) >= alert_threshold)
+    // Check for outliers first (extreme moves), then regular alerts
+    if (is_outlier(history.change_percent))
+      status = "⚠️  OUTLIER";
+    else if (is_alert(history.change_percent, is_crypto))
       status = "🚨 ALERT";
   }
 
