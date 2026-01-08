@@ -4,11 +4,14 @@
 #include <algorithm>
 #include <chrono>
 #include <format>
+#include <fstream>
+#include <iomanip>
 #include <map>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <print>
 #include <set>
+#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -30,7 +33,7 @@ constexpr auto colour_cyan = "\033[36m";
 constexpr auto colour_yellow = "\033[33m";
 
 // Dip threshold uses _pc literal from exit_logic_tests.h
-constexpr auto dip_threshold = -2_pc;
+// constexpr auto dip_threshold = -2_pc;  // Disabled with dip strategy
 
 // Position tracking for backtest
 struct Position {
@@ -55,11 +58,38 @@ struct BacktestStats {
   int losing_trades{};
 };
 
+// Parse ISO 8601 timestamp from bar data
+std::chrono::system_clock::time_point parse_bar_timestamp(const std::string &timestamp) {
+  // Alpaca bar timestamps are like: "2026-01-08T14:30:00Z"
+  std::tm tm = {};
+  std::istringstream ss(timestamp);
+  ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S");
+  return std::chrono::system_clock::from_time_t(std::mktime(&tm));
+}
+
+// Forward declare get_market_status (defined later)
+struct MarketStatus {
+  bool is_open{};
+  std::string message;
+};
+MarketStatus get_market_status(const std::chrono::system_clock::time_point &);
+
 void process_bar(const std::string &symbol, const lft::Bar &bar,
                  std::size_t bar_index, lft::PriceHistory &history,
                  const std::map<std::string, lft::PriceHistory> &all_histories,
                  BacktestStats &stats,
                  const std::map<std::string, lft::StrategyConfig> &configs) {
+
+  // Filter out extended hours for stocks (keep crypto 24/7)
+  auto is_crypto = symbol.find('/') != std::string::npos;
+  if (not is_crypto) {
+    auto bar_time = parse_bar_timestamp(bar.timestamp);
+    auto market_status = get_market_status(bar_time);
+
+    if (not market_status.is_open) {
+      return;  // Skip this bar - outside regular trading hours (9:30 AM - 4:00 PM ET)
+    }
+  }
 
   history.add_bar(bar.close, bar.high, bar.low, bar.volume);
 
@@ -124,7 +154,7 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
 
     // Evaluate entry strategies
     auto signals = std::vector<lft::StrategySignal>{
-        lft::Strategies::evaluate_dip(history, dip_threshold),
+        // lft::Strategies::evaluate_dip(history, dip_threshold),  // Disabled
         lft::Strategies::evaluate_ma_crossover(history),
         lft::Strategies::evaluate_mean_reversion(history),
         lft::Strategies::evaluate_volatility_breakout(history),
@@ -215,7 +245,7 @@ BacktestStats run_backtest_with_data(
     const std::map<std::string, lft::StrategyConfig> &configs) {
 
   auto stats = BacktestStats{};
-  stats.strategy_stats["dip"] = lft::StrategyStats{"dip"};
+  // stats.strategy_stats["dip"] = lft::StrategyStats{"dip"};  // Disabled
   stats.strategy_stats["ma_crossover"] = lft::StrategyStats{"ma_crossover"};
   stats.strategy_stats["mean_reversion"] = lft::StrategyStats{"mean_reversion"};
   stats.strategy_stats["volatility_breakout"] =
@@ -372,7 +402,7 @@ calibrate_all_strategies(lft::AlpacaClient &client,
   std::println("{}✓ Data fetched - ready for calibration{}\n", colour_green,
                colour_reset);
 
-  auto strategies = std::vector<std::string>{"dip",
+  auto strategies = std::vector<std::string>{// "dip",  // Disabled: loses heavily with tight stops
                                              "ma_crossover",
                                              "mean_reversion",
                                              "volatility_breakout",
@@ -454,11 +484,6 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
 }
 
 // Check if US stock market is open and time until open/close
-struct MarketStatus {
-  bool is_open{};
-  std::string message;
-};
-
 MarketStatus
 get_market_status(const std::chrono::system_clock::time_point &now) {
   using namespace std::chrono;
@@ -567,6 +592,45 @@ void print_strategy_stats(
         stat.net_profit(), avg_pl, colour_reset);
   }
   std::println("");
+}
+
+void write_stats_to_file(
+    const std::map<std::string, lft::StrategyStats> &stats,
+    std::string_view run_type) {
+
+  auto now = std::chrono::system_clock::now();
+  auto filename = std::format("lft_stats_{:%Y-%m-%d_%H-%M-%S}.csv", now);
+
+  auto file = std::ofstream{filename};
+  if (not file.is_open()) {
+    std::println("{}⚠  Failed to write stats file: {}{}", colour_yellow,
+                 filename, colour_reset);
+    return;
+  }
+
+  // Write header
+  file << "timestamp,run_type,strategy,signals,trades_executed,trades_closed,"
+       << "wins,losses,win_rate,total_profit,total_loss,net_profit,avg_profit\n";
+
+  // Write data for each strategy
+  auto timestamp = std::format("{:%Y-%m-%d %H:%M:%S}", now);
+  for (const auto &[name, stat] : stats) {
+    auto avg_profit = stat.trades_closed > 0
+                        ? stat.net_profit() / stat.trades_closed
+                        : 0.0;
+
+    file << std::format("{},{},{},{},{},{},{},{},{:.2f},{:.2f},{:.2f},{:.2f},{:.2f}\n",
+                       timestamp, run_type, stat.name,
+                       stat.signals_generated, stat.trades_executed,
+                       stat.trades_closed, stat.profitable_trades,
+                       stat.losing_trades, stat.win_rate(),
+                       stat.total_profit, stat.total_loss,
+                       stat.net_profit(), avg_profit);
+  }
+
+  file.close();
+  std::println("{}📝 Stats written to: {}{}", colour_green, filename,
+               colour_reset);
 }
 
 // Live trading loop
@@ -758,7 +822,7 @@ void run_live_trading(
 
           // Entry logic - only for enabled strategies
           auto signals = std::vector<lft::StrategySignal>{
-              lft::Strategies::evaluate_dip(history, dip_threshold),
+              // lft::Strategies::evaluate_dip(history, dip_threshold),  // Disabled
               lft::Strategies::evaluate_ma_crossover(history),
               lft::Strategies::evaluate_mean_reversion(history),
               lft::Strategies::evaluate_volatility_breakout(history),
@@ -855,7 +919,7 @@ void run_live_trading(
 
           // Entry logic - only for enabled strategies
           auto signals = std::vector<lft::StrategySignal>{
-              lft::Strategies::evaluate_dip(history, dip_threshold),
+              // lft::Strategies::evaluate_dip(history, dip_threshold),  // Disabled
               lft::Strategies::evaluate_ma_crossover(history),
               lft::Strategies::evaluate_mean_reversion(history),
               lft::Strategies::evaluate_volatility_breakout(history),
@@ -953,6 +1017,9 @@ void run_live_trading(
         next_update, cycles_remaining);
     std::this_thread::sleep_for(std::chrono::seconds{poll_interval_seconds});
   }
+
+  // Write final stats to file
+  write_stats_to_file(strategy_stats, "live_trading");
 }
 
 } // anonymous namespace
@@ -982,6 +1049,16 @@ int main() {
       "SAP",   // European software
       "BABA",  // China e-commerce
       "GLD",   // Gold
+      "SLV",   // Silver (iShares)
+      "SIVR",  // Silver (Aberdeen)
+      "SIL",   // Silver miners
+      "SLVR",  // Silver (Abrdn)
+      "USO",   // Oil (United States Oil Fund)
+      "UNG",   // Natural gas
+      "DBA",   // Agriculture basket
+      "CORN",  // Corn futures tracker
+      "WEAT",  // Wheat
+      "URA",   // Uranium miners
       "TLT",   // Long-term US bonds
       "IEF",   // Mid-term bonds
       "VNQ"    // Real estate
