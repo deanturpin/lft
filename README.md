@@ -49,13 +49,14 @@ make run
 
 ```
 src/
-  lft.cxx       - Main application (calibrate + execute workflow)
-  shared/       - Common libraries
-    alpaca_client.cxx - Alpaca API integration
-    strategies.cxx    - Trading strategy implementations
+  lft.cxx           - Main application (calibrate + execute workflow)
+  alpaca_client.cxx - Alpaca API integration
+  strategies.cxx    - Trading strategy implementations
 include/
-  shared/       - Header files
-tests/          - Test suite
+  defs.h            - Trading constants and compile-time tests
+  alpaca_client.h   - API client interface
+  strategies.h      - Strategy interfaces and data structures
+  exit_logic_tests.h - Compile-time exit logic verification
 ```
 
 ## Development Roadmap

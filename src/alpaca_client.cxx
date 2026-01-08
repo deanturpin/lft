@@ -4,7 +4,6 @@
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 #include <print>
-#include <ranges>
 
 using json = nlohmann::json;
 

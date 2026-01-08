@@ -4,14 +4,11 @@
 #include <algorithm>
 #include <chrono>
 #include <format>
-#include <iomanip>
-#include <iostream>
 #include <map>
 #include <mutex>
 #include <nlohmann/json.hpp>
 #include <print>
 #include <set>
-#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -21,7 +18,7 @@
 #include "exit_logic_tests.h"
 
 using namespace std::chrono_literals;
-using namespace lft;  // Import constants from defs.h
+using namespace lft; // Import constants from defs.h
 
 namespace {
 
@@ -97,8 +94,8 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
 
     // Exit conditions using position-specific parameters
     auto should_exit = pl_pct >= pos.take_profit_pct or
-                       pl_pct <= -pos.stop_loss_pct or trailing_stop_triggered or
-                       time_exit_triggered;
+                       pl_pct <= -pos.stop_loss_pct or
+                       trailing_stop_triggered or time_exit_triggered;
 
     if (should_exit) {
       stats.cash += current_value;
@@ -121,8 +118,9 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
   } else {
     // Noise regime detection: classify market conditions
     auto recent_noise = history.recent_noise(20);
-    auto low_noise_regime = recent_noise > 0.0 and recent_noise < 0.005;   // <0.5% noise
-    auto high_noise_regime = recent_noise > 0.015;                          // >1.5% noise
+    auto low_noise_regime =
+        recent_noise > 0.0 and recent_noise < 0.005; // <0.5% noise
+    auto high_noise_regime = recent_noise > 0.015;   // >1.5% noise
 
     // Evaluate entry strategies
     auto signals = std::vector<lft::StrategySignal>{
@@ -143,19 +141,20 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
 
       // Apply low-volume confidence filter
       auto vol_factor = history.volume_factor();
-      signal.confidence /= vol_factor;  // Reduce confidence in low-volume conditions
+      signal.confidence /=
+          vol_factor; // Reduce confidence in low-volume conditions
 
       // Noise regime filtering: disable momentum strategies in high noise
       if (high_noise_regime and
           (signal.strategy_name == "ma_crossover" or
            signal.strategy_name == "volatility_breakout" or
            signal.strategy_name == "volume_surge")) {
-        continue;  // Skip momentum strategies in noisy conditions
+        continue; // Skip momentum strategies in noisy conditions
       }
 
       // Noise regime filtering: disable mean reversion in low noise
       if (low_noise_regime and signal.strategy_name == "mean_reversion") {
-        continue;  // Skip mean reversion in trending conditions
+        continue; // Skip mean reversion in trending conditions
       }
 
       if (signal.should_buy) {
@@ -183,8 +182,10 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
           // Calculate adaptive TP/SL based on recent noise
           auto recent_noise = history.recent_noise(20);
           const auto &config = configs.at(signal.strategy_name);
-          auto adaptive_tp = adaptive_take_profit(config.take_profit_pct, recent_noise);
-          auto adaptive_sl = adaptive_stop_loss(config.stop_loss_pct, recent_noise);
+          auto adaptive_tp =
+              adaptive_take_profit(config.take_profit_pct, recent_noise);
+          auto adaptive_sl =
+              adaptive_stop_loss(config.stop_loss_pct, recent_noise);
 
           stats.positions[symbol] =
               Position{.symbol = symbol,
@@ -193,9 +194,9 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
                        .quantity = quantity,
                        .entry_time = bar.timestamp,
                        .entry_bar_index = bar_index,
-                       .peak_price = bar.close, // Peak tracks mid price
-                       .take_profit_pct = adaptive_tp,      // Use noise-adjusted TP
-                       .stop_loss_pct = adaptive_sl,        // Use noise-adjusted SL
+                       .peak_price = bar.close,        // Peak tracks mid price
+                       .take_profit_pct = adaptive_tp, // Use noise-adjusted TP
+                       .stop_loss_pct = adaptive_sl,   // Use noise-adjusted SL
                        .trailing_stop_pct = config.trailing_stop_pct};
 
           ++stats.strategy_stats[signal.strategy_name].trades_executed;
@@ -371,10 +372,12 @@ calibrate_all_strategies(lft::AlpacaClient &client,
   std::println("{}✓ Data fetched - ready for calibration{}\n", colour_green,
                colour_reset);
 
-  auto strategies =
-      std::vector<std::string>{"dip", "ma_crossover", "mean_reversion",
-                               "volatility_breakout", "relative_strength",
-                               "volume_surge"};
+  auto strategies = std::vector<std::string>{"dip",
+                                             "ma_crossover",
+                                             "mean_reversion",
+                                             "volatility_breakout",
+                                             "relative_strength",
+                                             "volume_surge"};
 
   // Calibrate all strategies in parallel using threads
   auto strategy_configs = std::vector<lft::StrategyConfig>(strategies.size());
@@ -439,7 +442,7 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
 
     // Check for outliers first (extreme moves), then regular alerts
     if (is_outlier(history.change_percent))
-      status = "⚠️  OUTLIER";
+      status = "⚠️ OUTLIER";
     else if (is_alert(history.change_percent, is_crypto))
       status = "🚨 ALERT";
   }
@@ -456,7 +459,8 @@ struct MarketStatus {
   std::string message;
 };
 
-MarketStatus get_market_status(const std::chrono::system_clock::time_point &now) {
+MarketStatus
+get_market_status(const std::chrono::system_clock::time_point &now) {
   using namespace std::chrono;
 
   // Convert to time_t to get weekday
@@ -479,8 +483,8 @@ MarketStatus get_market_status(const std::chrono::system_clock::time_point &now)
   auto et_tm = std::gmtime(&et_time_t);
 
   auto current_time = hours{et_tm->tm_hour} + minutes{et_tm->tm_min};
-  constexpr auto market_open = 9h + 30min;  // 9:30 AM ET
-  constexpr auto market_close = 16h;         // 4:00 PM ET
+  constexpr auto market_open = 9h + 30min; // 9:30 AM ET
+  constexpr auto market_close = 16h;       // 4:00 PM ET
 
   if (current_time >= market_open and current_time < market_close) {
     auto time_until_close = market_close - current_time;
@@ -501,19 +505,23 @@ MarketStatus get_market_status(const std::chrono::system_clock::time_point &now)
   }
 }
 
-void print_account_stats(lft::AlpacaClient &client, const std::chrono::system_clock::time_point &now) {
+void print_account_stats(lft::AlpacaClient &client,
+                         const std::chrono::system_clock::time_point &now) {
   auto account_result = client.get_account();
   if (not account_result)
     return;
 
-  auto account_json = nlohmann::json::parse(account_result.value(), nullptr, false);
+  auto account_json =
+      nlohmann::json::parse(account_result.value(), nullptr, false);
   if (account_json.is_discarded())
     return;
 
   auto cash = std::stod(account_json["cash"].get<std::string>());
-  auto buying_power = std::stod(account_json["buying_power"].get<std::string>());
+  auto buying_power =
+      std::stod(account_json["buying_power"].get<std::string>());
   auto equity = std::stod(account_json["equity"].get<std::string>());
-  auto portfolio_value = std::stod(account_json["portfolio_value"].get<std::string>());
+  auto portfolio_value =
+      std::stod(account_json["portfolio_value"].get<std::string>());
 
   std::println("\n💰 ACCOUNT STATUS");
   std::println("{:-<70}", "");
@@ -525,7 +533,7 @@ void print_account_stats(lft::AlpacaClient &client, const std::chrono::system_cl
   // Market status
   auto market_status = get_market_status(now);
   auto status_colour = market_status.is_open ? colour_green : colour_red;
-  std::println("{}{}{}",status_colour, market_status.message, colour_reset);
+  std::println("{}{}{}", status_colour, market_status.message, colour_reset);
 
   // Warn if low balance
   if (cash < notional_amount) {
@@ -672,10 +680,11 @@ void run_live_trading(
             // Check time-based exit (approximate: each cycle is ~1 minute)
             auto time_exit_triggered = false;
             if (position_entry_times.contains(symbol)) {
-              auto elapsed_seconds =
-                  std::chrono::duration<double>(now - position_entry_times[symbol])
-                      .count();
-              auto minutes_held = static_cast<long long>(elapsed_seconds / 60.0);
+              auto elapsed_seconds = std::chrono::duration<double>(
+                                         now - position_entry_times[symbol])
+                                         .count();
+              auto minutes_held =
+                  static_cast<long long>(elapsed_seconds / 60.0);
               time_exit_triggered = minutes_held >= max_hold_minutes;
             }
 
@@ -778,26 +787,30 @@ void run_live_trading(
                 auto order = client.place_order(symbol, "buy", notional_amount);
                 if (order) {
                   // Parse order response to verify status
-                  auto order_json = nlohmann::json::parse(order.value(), nullptr, false);
+                  auto order_json =
+                      nlohmann::json::parse(order.value(), nullptr, false);
                   if (not order_json.is_discarded()) {
                     auto order_id = order_json.value("id", "unknown");
                     auto status = order_json.value("status", "unknown");
                     auto side = order_json.value("side", "unknown");
                     auto notional_str = order_json.value("notional", "0");
 
-                    std::println("✅ Order placed: ID={} status={} side={} notional=${}",
-                                order_id, status, side, notional_str);
+                    std::println(
+                        "✅ Order placed: ID={} status={} side={} notional=${}",
+                        order_id, status, side, notional_str);
 
                     // Only count as executed if order is accepted
-                    if (status == "accepted" or status == "pending_new" or status == "filled") {
+                    if (status == "accepted" or status == "pending_new" or
+                        status == "filled") {
                       existing_positions.insert(symbol);
                       position_strategies[symbol] = signal.strategy_name;
-                      position_configs[symbol] = configs.at(signal.strategy_name);
+                      position_configs[symbol] =
+                          configs.at(signal.strategy_name);
                       position_entry_times[symbol] = now;
                       ++strategy_stats[signal.strategy_name].trades_executed;
                     } else {
                       std::println("{}⚠  Order status '{}' - may not execute{}",
-                                  colour_yellow, status, colour_reset);
+                                   colour_yellow, status, colour_reset);
                     }
                   } else {
                     std::println("✅ Order placed (could not parse response)");
@@ -871,26 +884,30 @@ void run_live_trading(
                 auto order = client.place_order(symbol, "buy", notional_amount);
                 if (order) {
                   // Parse order response to verify status
-                  auto order_json = nlohmann::json::parse(order.value(), nullptr, false);
+                  auto order_json =
+                      nlohmann::json::parse(order.value(), nullptr, false);
                   if (not order_json.is_discarded()) {
                     auto order_id = order_json.value("id", "unknown");
                     auto status = order_json.value("status", "unknown");
                     auto side = order_json.value("side", "unknown");
                     auto notional_str = order_json.value("notional", "0");
 
-                    std::println("✅ Order placed: ID={} status={} side={} notional=${}",
-                                order_id, status, side, notional_str);
+                    std::println(
+                        "✅ Order placed: ID={} status={} side={} notional=${}",
+                        order_id, status, side, notional_str);
 
                     // Only count as executed if order is accepted
-                    if (status == "accepted" or status == "pending_new" or status == "filled") {
+                    if (status == "accepted" or status == "pending_new" or
+                        status == "filled") {
                       existing_positions.insert(symbol);
                       position_strategies[symbol] = signal.strategy_name;
-                      position_configs[symbol] = configs.at(signal.strategy_name);
+                      position_configs[symbol] =
+                          configs.at(signal.strategy_name);
                       position_entry_times[symbol] = now;
                       ++strategy_stats[signal.strategy_name].trades_executed;
                     } else {
                       std::println("{}⚠  Order status '{}' - may not execute{}",
-                                  colour_yellow, status, colour_reset);
+                                   colour_yellow, status, colour_reset);
                     }
                   } else {
                     std::println("✅ Order placed (could not parse response)");
