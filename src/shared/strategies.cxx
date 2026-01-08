@@ -83,7 +83,11 @@ StrategySignal Strategies::evaluate_mean_reversion(const PriceHistory& history) 
     // Defensive assertions: validate statistical values
     assert(std::isfinite(current_price) && current_price > 0.0 && "Current price must be positive and finite");
     assert(std::isfinite(ma) && ma > 0.0 && "MA must be positive and finite");
-    assert(std::isfinite(std_dev) && std_dev > 0.0 && "Std dev must be positive and finite");
+    assert(std::isfinite(std_dev) && std_dev >= 0.0 && "Std dev must be non-negative and finite");
+
+    // If volatility is too low (near zero), mean reversion strategy doesn't apply
+    if (std_dev < 0.0001)
+        return signal;
 
     // Buy when price is more than 2 standard deviations below MA
     auto deviation = (current_price - ma) / std_dev;
