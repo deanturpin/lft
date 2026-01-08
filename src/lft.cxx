@@ -430,7 +430,11 @@ void print_header() {
 
 void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
                     lft::PriceHistory &history) {
-  constexpr auto alert_threshold = 2_pc;
+  // Alert thresholds: crypto is much more volatile than stocks
+  // Note: change_percent is already in percent form (e.g., 2.5 for 2.5%), so use raw values
+  auto is_crypto = symbol.find('/') != std::string::npos;
+  auto alert_threshold = is_crypto ? 5.0 : 2.0;  // 5% for crypto, 2% for stocks
+
   auto status = std::string{};
   auto colour = colour_reset;
 
