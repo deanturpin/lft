@@ -37,15 +37,15 @@ FetchContent_MakeAvailable(httplib json)
 # Include directories
 include_directories(include)
 
-# Shared library for Alpaca API client
+# Alpaca API client library
 add_library(alpaca_client STATIC
-    src/shared/alpaca_client.cxx
+    src/alpaca_client.cxx
 )
 target_link_libraries(alpaca_client PUBLIC httplib::httplib nlohmann_json::nlohmann_json)
 
 # Strategies library
 add_library(strategies STATIC
-    src/shared/strategies.cxx
+    src/strategies.cxx
 )
 target_link_libraries(strategies PUBLIC alpaca_client)
 

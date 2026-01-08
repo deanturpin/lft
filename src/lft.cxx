@@ -1,5 +1,5 @@
-#include "shared/alpaca_client.h"
-#include "shared/strategies.h"
+#include "alpaca_client.h"
+#include "strategies.h"
 #include <algorithm>
 #include <chrono>
 #include <format>
@@ -17,7 +17,7 @@
 // Include compile-time exit logic tests
 // This header defines: operator""_pc, stock_spread, crypto_spread,
 // take_profit_pct, stop_loss_pct, trailing_stop_pct
-#include "shared/exit_logic_tests.h"
+#include "exit_logic_tests.h"
 
 using namespace std::chrono_literals;
 

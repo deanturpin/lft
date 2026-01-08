@@ -1,4 +1,4 @@
-#include "shared/alpaca_client.h"
+#include "alpaca_client.h"
 #include <cstdlib>
 #include <format>
 #include <httplib.h>
