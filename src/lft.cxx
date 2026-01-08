@@ -934,12 +934,13 @@ void run_live_trading(
     // Print stats
     print_strategy_stats(strategy_stats);
 
-    // Calculate cycles remaining
+    // Calculate cycles remaining and next update time
     auto cycles_remaining = max_cycles - cycle;
+    auto next_update = now + 65s;
 
     std::println(
-        "\n⏳ Next update in 65 seconds | {} cycles until re-calibration\n",
-        cycles_remaining);
+        "\n⏳ Next update at {:%H:%M:%S} | {} cycles until re-calibration\n",
+        next_update, cycles_remaining);
     std::this_thread::sleep_for(65s);  // 65s ensures new 1Min bar is available (60s bar + 5s buffer)
   }
 }
