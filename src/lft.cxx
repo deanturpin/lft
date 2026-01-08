@@ -938,9 +938,9 @@ void run_live_trading(
     auto cycles_remaining = max_cycles - cycle;
 
     std::println(
-        "\n⏳ Next update in 60 seconds | {} cycles until re-calibration\n",
+        "\n⏳ Next update in 65 seconds | {} cycles until re-calibration\n",
         cycles_remaining);
-    std::this_thread::sleep_for(60s);
+    std::this_thread::sleep_for(65s);  // 65s ensures new 1Min bar is available (60s bar + 5s buffer)
   }
 }
 
