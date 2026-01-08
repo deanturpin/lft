@@ -1,4 +1,5 @@
 #include "alpaca_client.h"
+#include "defs.h"
 #include "strategies.h"
 #include <algorithm>
 #include <chrono>
@@ -20,6 +21,7 @@
 #include "exit_logic_tests.h"
 
 using namespace std::chrono_literals;
+using namespace lft;  // Import constants from defs.h
 
 namespace {
 
@@ -30,15 +32,8 @@ constexpr auto colour_red = "\033[31m";
 constexpr auto colour_cyan = "\033[36m";
 constexpr auto colour_yellow = "\033[33m";
 
-// Trading parameters
+// Dip threshold uses _pc literal from exit_logic_tests.h
 constexpr auto dip_threshold = -2_pc;
-constexpr auto notional_amount = 100.0;
-
-// Calibration parameters
-constexpr auto calibration_days = 30; // Use last 30 days for better calibration
-
-// Time-based exit parameter (not in test header as it's not tested)
-constexpr auto max_hold_minutes = 120; // Force exit after 2 hours
 
 // Position tracking for backtest
 struct Position {
@@ -592,7 +587,6 @@ void run_live_trading(
       strategy_stats[name] = lft::StrategyStats{name};
   }
 
-  constexpr auto max_cycles = 60; // Run for 60 minutes (60 cycles)
   auto cycle = 0;
 
   while (cycle < max_cycles) {
@@ -936,12 +930,12 @@ void run_live_trading(
 
     // Calculate cycles remaining and next update time
     auto cycles_remaining = max_cycles - cycle;
-    auto next_update = now + 65s;
+    auto next_update = now + std::chrono::seconds{poll_interval_seconds};
 
     std::println(
         "\n⏳ Next update at {:%H:%M:%S} | {} cycles until re-calibration\n",
         next_update, cycles_remaining);
-    std::this_thread::sleep_for(65s);  // 65s ensures new 1Min bar is available (60s bar + 5s buffer)
+    std::this_thread::sleep_for(std::chrono::seconds{poll_interval_seconds});
   }
 }
 
