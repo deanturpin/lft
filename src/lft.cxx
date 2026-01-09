@@ -591,45 +591,6 @@ void print_strategy_stats(
   std::println("");
 }
 
-void write_stats_to_file(
-    const std::map<std::string, lft::StrategyStats> &stats,
-    std::string_view run_type) {
-
-  auto now = std::chrono::system_clock::now();
-  auto filename = std::format("lft_stats_{:%Y-%m-%d_%H-%M-%S}.csv", now);
-
-  auto file = std::ofstream{filename};
-  if (not file.is_open()) {
-    std::println("{}⚠  Failed to write stats file: {}{}", colour_yellow,
-                 filename, colour_reset);
-    return;
-  }
-
-  // Write header
-  file << "timestamp,run_type,strategy,signals,trades_executed,trades_closed,"
-       << "wins,losses,win_rate,total_profit,total_loss,net_profit,avg_profit\n";
-
-  // Write data for each strategy
-  auto timestamp = std::format("{:%Y-%m-%d %H:%M:%S}", now);
-  for (const auto &[name, stat] : stats) {
-    auto avg_profit = stat.trades_closed > 0
-                        ? stat.net_profit() / stat.trades_closed
-                        : 0.0;
-
-    file << std::format("{},{},{},{},{},{},{},{},{:.2f},{:.2f},{:.2f},{:.2f},{:.2f}\n",
-                       timestamp, run_type, stat.name,
-                       stat.signals_generated, stat.trades_executed,
-                       stat.trades_closed, stat.profitable_trades,
-                       stat.losing_trades, stat.win_rate(),
-                       stat.total_profit, stat.total_loss,
-                       stat.net_profit(), avg_profit);
-  }
-
-  file.close();
-  std::println("{}📝 Stats written to: {}{}", colour_green, filename,
-               colour_reset);
-}
-
 void log_trade(std::string_view symbol, std::string_view strategy,
                std::string_view exit_reason, double entry_price,
                double exit_price, double profit, double profit_pct,
@@ -675,6 +636,9 @@ void log_trade(std::string_view symbol, std::string_view strategy,
       notional, account_balance, profit_per_dollar);
 
   file.close();
+
+  std::println("{}📝 Trade logged to: {}{}", colour_green, filename,
+               colour_reset);
 }
 
 // Live trading loop
@@ -1089,8 +1053,6 @@ void run_live_trading(
     std::this_thread::sleep_for(std::chrono::seconds{poll_interval_seconds});
   }
 
-  // Write final stats to file
-  write_stats_to_file(strategy_stats, "live_trading");
 }
 
 } // anonymous namespace
