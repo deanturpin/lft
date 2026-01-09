@@ -4,7 +4,6 @@ namespace lft {
 
 // Trading parameters
 constexpr auto notional_amount = 1000.0; // Dollar amount per trade
-constexpr auto max_hold_minutes = 120;   // Force exit after 2 hours
 constexpr auto calibration_days = 30;    // Duration for strategy calibration
 
 // Timing parameters
@@ -52,9 +51,6 @@ static_assert(notional_amount > 0.0, "Trade size must be positive");
 static_assert(notional_amount >= 1.0, "Trade size too small - minimum $1");
 static_assert(notional_amount <= 100000.0,
               "Trade size dangerously high - max $100k per trade");
-static_assert(max_hold_minutes > 0, "Max hold time must be positive");
-static_assert(max_hold_minutes <= 1440,
-              "Max hold time too long - max 24 hours (1440 min)");
 static_assert(calibration_days > 0, "Calibration period must be positive");
 static_assert(calibration_days >= 7,
               "Calibration period too short - minimum 7 days");

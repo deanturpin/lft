@@ -56,7 +56,29 @@ struct PriceHistory {
     double last_price{};
     double change_percent{};
     bool has_history{false};
+    std::string last_trade_timestamp;  // Track last trade to avoid duplicates
 
+    // For live trading with timestamps - only add if trade is new
+    void add_price_with_timestamp(double price, std::string_view timestamp) {
+        // Only add if this is a NEW trade (different timestamp)
+        if (timestamp.empty() or timestamp != last_trade_timestamp) {
+            prices.push_back(price);
+            last_trade_timestamp = std::string{timestamp};
+
+            // Keep last 100 data points for moving averages
+            if (prices.size() > 100)
+                prices.erase(prices.begin());
+
+            if (prices.size() >= 2) {
+                last_price = prices[prices.size() - 2];
+                change_percent = ((price - last_price) / last_price) * 100.0;
+                has_history = true;
+            }
+        }
+        // If same timestamp: do nothing, preserve existing change_percent
+    }
+
+    // For backtesting without timestamps - always add
     void add_price(double price) {
         prices.push_back(price);
         // Keep last 100 data points for moving averages

@@ -118,14 +118,10 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
     auto trailing_stop_price = pos.peak_price * (1.0 - pos.trailing_stop_pct);
     auto trailing_stop_triggered = sell_price < trailing_stop_price;
 
-    // Check time-based exit (1 bar = 1 minute for 1Min bars)
-    auto bars_held = bar_index - pos.entry_bar_index;
-    auto time_exit_triggered = bars_held >= max_hold_minutes;
-
     // Exit conditions using position-specific parameters
     auto should_exit = pl_pct >= pos.take_profit_pct or
                        pl_pct <= -pos.stop_loss_pct or
-                       trailing_stop_triggered or time_exit_triggered;
+                       trailing_stop_triggered;
 
     if (should_exit) {
       stats.cash += current_value;
@@ -371,7 +367,6 @@ calibrate_all_strategies(lft::AlpacaClient &client,
   std::println("  Take Profit: {:.1f}%", take_profit_pct * 100.0);
   std::println("  Stop Loss: {:.1f}%", stop_loss_pct * 100.0);
   std::println("  Trailing Stop: {:.1f}%", trailing_stop_pct * 100.0);
-  std::println("  Max Hold Time: {} minutes", max_hold_minutes);
 
   // Fetch historic data ONCE upfront (huge speedup!)
   std::println("\n{}📥 Fetching historic data{}", colour_yellow, colour_reset);
@@ -462,7 +457,9 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
   auto status = std::string{};
   auto colour = colour_reset;
 
-  history.add_price(snap.latest_trade_price);
+  // Use timestamp-aware method to avoid adding stale trades
+  history.add_price_with_timestamp(snap.latest_trade_price,
+                                     snap.latest_trade_timestamp);
 
   if (history.has_history) {
     if (history.change_percent > 0.0)
@@ -769,11 +766,24 @@ void run_live_trading(
                 std::stod(pos["avg_entry_price"].get<std::string>());
             auto pl_pct = (current_price - avg_entry) / avg_entry;
 
-            // Skip if no strategy config
-            if (not position_configs.contains(symbol))
-              continue;
+            // Get strategy config - use default for orphaned positions
+            auto config = lft::StrategyConfig{};
+            auto strategy = std::string{"unknown"};
 
-            const auto &config = position_configs[symbol];
+            if (position_configs.contains(symbol)) {
+              config = position_configs[symbol];
+              strategy = position_strategies[symbol];
+            } else {
+              // Orphaned position from previous session - use conservative defaults
+              config.take_profit_pct = take_profit_pct;
+              config.stop_loss_pct = stop_loss_pct;
+              config.trailing_stop_pct = trailing_stop_pct;
+              strategy = "orphaned";
+              std::println("{}⚠️  Managing orphaned position: {}{}", colour_yellow,
+                         symbol, colour_reset);
+            }
+
+            const auto &config_ref = config;
 
             // Update peak price
             if (not position_peaks.contains(symbol))
@@ -783,33 +793,19 @@ void run_live_trading(
 
             // Check trailing stop (price falls below peak by trailing_stop_pct)
             auto peak = position_peaks[symbol];
-            auto trailing_stop_price = peak * (1.0 - config.trailing_stop_pct);
+            auto trailing_stop_price = peak * (1.0 - config_ref.trailing_stop_pct);
             auto trailing_stop_triggered = current_price < trailing_stop_price;
 
-            // Check time-based exit (approximate: each cycle is ~1 minute)
-            auto time_exit_triggered = false;
-            if (position_entry_times.contains(symbol)) {
-              auto elapsed_seconds = std::chrono::duration<double>(
-                                         now - position_entry_times[symbol])
-                                         .count();
-              auto minutes_held =
-                  static_cast<long long>(elapsed_seconds / 60.0);
-              time_exit_triggered = minutes_held >= max_hold_minutes;
-            }
-
             // Exit using strategy-specific parameters
-            auto should_exit = pl_pct >= config.take_profit_pct or
-                               pl_pct <= -config.stop_loss_pct or
-                               trailing_stop_triggered or time_exit_triggered;
+            auto should_exit = pl_pct >= config_ref.take_profit_pct or
+                               pl_pct <= -config_ref.stop_loss_pct or
+                               trailing_stop_triggered;
 
             if (should_exit) {
               auto profit_percent = (unrealized_pl / cost_basis) * 100.0;
-              auto strategy = position_strategies[symbol];
 
               auto exit_reason = std::string{};
-              if (time_exit_triggered)
-                exit_reason = "TIME LIMIT";
-              else if (trailing_stop_triggered)
+              if (trailing_stop_triggered)
                 exit_reason = "TRAILING STOP";
               else if (unrealized_pl > 0.0)
                 exit_reason = "PROFIT TARGET";
@@ -846,8 +842,8 @@ void run_live_trading(
                   log_trade(symbol, strategy, exit_reason, avg_entry,
                            current_price, unrealized_pl, profit_percent,
                            position_entry_times[symbol], now,
-                           config.take_profit_pct, config.stop_loss_pct,
-                           config.trailing_stop_pct, peak, quantity,
+                           config_ref.take_profit_pct, config_ref.stop_loss_pct,
+                           config_ref.trailing_stop_pct, peak, quantity,
                            cost_basis, account_balance);
                 }
 
