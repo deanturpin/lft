@@ -633,6 +633,42 @@ void write_stats_to_file(
                colour_reset);
 }
 
+void log_trade(std::string_view symbol, std::string_view strategy,
+               std::string_view exit_reason, double entry_price,
+               double exit_price, double profit, double profit_pct,
+               const std::chrono::system_clock::time_point &entry_time,
+               const std::chrono::system_clock::time_point &exit_time) {
+
+  auto filename = std::string{"lft_trades.csv"};
+
+  // Check if file exists to determine if we need to write header
+  auto file_exists = std::ifstream{filename}.good();
+
+  auto file = std::ofstream{filename, std::ios::app};
+  if (not file.is_open()) {
+    std::println("{}⚠  Failed to write trade log: {}{}", colour_yellow,
+                 filename, colour_reset);
+    return;
+  }
+
+  // Write header if new file
+  if (not file_exists)
+    file << "entry_time,exit_time,symbol,strategy,entry_price,exit_price,"
+         << "profit,profit_pct,exit_reason,hold_duration_minutes\n";
+
+  // Calculate hold duration
+  auto duration = std::chrono::duration<double>(exit_time - entry_time).count();
+  auto hold_minutes = static_cast<long long>(duration / 60.0);
+
+  // Write trade data
+  file << std::format("{:%Y-%m-%d %H:%M:%S},{:%Y-%m-%d %H:%M:%S},{},{},{:.4f},{:.4f},{:.2f},{:.2f}%,{},{}\n",
+                     entry_time, exit_time, symbol, strategy,
+                     entry_price, exit_price, profit, profit_pct,
+                     exit_reason, hold_minutes);
+
+  file.close();
+}
+
 // Live trading loop
 void run_live_trading(
     lft::AlpacaClient &client, const std::vector<std::string> &stocks,
@@ -652,11 +688,9 @@ void run_live_trading(
   auto existing_positions = std::set<std::string>{};
   auto strategy_stats = std::map<std::string, lft::StrategyStats>{};
 
-  // Initialise stats for enabled strategies only
-  for (const auto &[name, config] : configs) {
-    if (config.enabled)
-      strategy_stats[name] = lft::StrategyStats{name};
-  }
+  // Initialise stats for ALL strategies (enabled and disabled)
+  for (const auto &[name, config] : configs)
+    strategy_stats[name] = lft::StrategyStats{name};
 
   auto cycle = 0;
 
@@ -780,6 +814,13 @@ void run_live_trading(
               if (close_result) {
                 std::println("✅ Position closed: {}", symbol);
                 existing_positions.erase(symbol);
+
+                // Log the trade
+                if (position_entry_times.contains(symbol)) {
+                  log_trade(symbol, strategy, exit_reason, avg_entry,
+                           current_price, unrealized_pl, profit_percent,
+                           position_entry_times[symbol], now);
+                }
 
                 if (strategy_stats.contains(strategy)) {
                   ++strategy_stats[strategy].trades_closed;
