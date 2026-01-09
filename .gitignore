@@ -27,6 +27,9 @@ build/lft
 # Dependencies
 _deps/
 
+# Trading logs (generated data, not source code)
+*.csv
+
 VPS_DEPLOYMENT.md
 Dockerfile
 docker-compose.yml
