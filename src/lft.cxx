@@ -637,7 +637,10 @@ void log_trade(std::string_view symbol, std::string_view strategy,
                std::string_view exit_reason, double entry_price,
                double exit_price, double profit, double profit_pct,
                const std::chrono::system_clock::time_point &entry_time,
-               const std::chrono::system_clock::time_point &exit_time) {
+               const std::chrono::system_clock::time_point &exit_time,
+               double take_profit_pct, double stop_loss_pct,
+               double trailing_stop_pct, double peak_price, double quantity,
+               double notional, double account_balance) {
 
   auto filename = std::string{"lft_trades.csv"};
 
@@ -651,20 +654,28 @@ void log_trade(std::string_view symbol, std::string_view strategy,
     return;
   }
 
-  // Write header if new file
+  // Write comprehensive header if new file
   if (not file_exists)
     file << "entry_time,exit_time,symbol,strategy,entry_price,exit_price,"
-         << "profit,profit_pct,exit_reason,hold_duration_minutes\n";
+         << "profit,profit_pct,exit_reason,hold_duration_minutes,"
+         << "take_profit_pct,stop_loss_pct,trailing_stop_pct,peak_price,"
+         << "quantity,notional,account_balance,profit_per_dollar\n";
 
   // Calculate hold duration
   auto duration = std::chrono::duration<double>(exit_time - entry_time).count();
   auto hold_minutes = static_cast<long long>(duration / 60.0);
 
-  // Write trade data
-  file << std::format("{:%Y-%m-%d %H:%M:%S},{:%Y-%m-%d %H:%M:%S},{},{},{:.4f},{:.4f},{:.2f},{:.2f}%,{},{}\n",
-                     entry_time, exit_time, symbol, strategy,
-                     entry_price, exit_price, profit, profit_pct,
-                     exit_reason, hold_minutes);
+  // Calculate profit per dollar invested (ROI)
+  auto profit_per_dollar = notional > 0.0 ? profit / notional : 0.0;
+
+  // Write comprehensive trade data
+  file << std::format(
+      "{:%Y-%m-%d %H:%M:%S},{:%Y-%m-%d %H:%M:%S},{},{},{:.4f},{:.4f},"
+      "{:.2f},{:.2f}%,{},{},{:.2f}%,{:.2f}%,{:.2f}%,{:.4f},{:.6f},{:.2f},{:.2f},{:.6f}\n",
+      entry_time, exit_time, symbol, strategy, entry_price, exit_price, profit,
+      profit_pct, exit_reason, hold_minutes, take_profit_pct * 100.0,
+      stop_loss_pct * 100.0, trailing_stop_pct * 100.0, peak_price, quantity,
+      notional, account_balance, profit_per_dollar);
 
   file.close();
 }
@@ -815,11 +826,29 @@ void run_live_trading(
                 std::println("✅ Position closed: {}", symbol);
                 existing_positions.erase(symbol);
 
-                // Log the trade
+                // Log the trade with full details
                 if (position_entry_times.contains(symbol)) {
+                  // Get quantity from position
+                  auto qty_str = pos["qty"].get<std::string>();
+                  auto quantity = std::stod(qty_str);
+
+                  // Get current account balance
+                  auto account_balance = 0.0;
+                  auto account_result = client.get_account();
+                  if (account_result) {
+                    auto account_json =
+                        nlohmann::json::parse(account_result.value(), nullptr, false);
+                    if (not account_json.is_discarded())
+                      account_balance =
+                          std::stod(account_json["portfolio_value"].get<std::string>());
+                  }
+
                   log_trade(symbol, strategy, exit_reason, avg_entry,
                            current_price, unrealized_pl, profit_percent,
-                           position_entry_times[symbol], now);
+                           position_entry_times[symbol], now,
+                           config.take_profit_pct, config.stop_loss_pct,
+                           config.trailing_stop_pct, peak, quantity,
+                           cost_basis, account_balance);
                 }
 
                 if (strategy_stats.contains(strategy)) {
