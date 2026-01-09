@@ -66,8 +66,11 @@ public:
     // Get all open positions
     std::expected<std::string, AlpacaError> get_positions();
 
-    // Place a market order (notional = dollar amount for fractional shares)
+    // Place a market order by notional amount (dollar-based, for stocks)
     std::expected<std::string, AlpacaError> place_order(std::string_view, std::string_view, double);
+
+    // Place a market order by quantity (for crypto to avoid notional/qty confusion)
+    std::expected<std::string, AlpacaError> place_order_qty(std::string_view, std::string_view, double);
 
     // Close a position by symbol
     std::expected<std::string, AlpacaError> close_position(std::string_view);

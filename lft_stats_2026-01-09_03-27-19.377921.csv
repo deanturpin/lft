@@ -1,0 +1,6 @@
+timestamp,run_type,strategy,signals,trades_executed,trades_closed,wins,losses,win_rate,total_profit,total_loss,net_profit,avg_profit
+2026-01-09 03:27:19.377921,live_trading,ma_crossover,0,0,0,0,0,0.00,0.00,0.00,0.00,0.00
+2026-01-09 03:27:19.377921,live_trading,mean_reversion,0,0,0,0,0,0.00,0.00,0.00,0.00,0.00
+2026-01-09 03:27:19.377921,live_trading,relative_strength,0,0,0,0,0,0.00,0.00,0.00,0.00,0.00
+2026-01-09 03:27:19.377921,live_trading,volatility_breakout,0,0,0,0,0,0.00,0.00,0.00,0.00,0.00
+2026-01-09 03:27:19.377921,live_trading,volume_surge,0,0,0,0,0,0.00,0.00,0.00,0.00,0.00

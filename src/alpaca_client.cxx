@@ -277,6 +277,52 @@ AlpacaClient::place_order(std::string_view symbol, std::string_view side,
 }
 
 std::expected<std::string, AlpacaError>
+AlpacaClient::place_order_qty(std::string_view symbol, std::string_view side,
+                              double quantity) {
+
+  auto client = httplib::Client{base_url_};
+  client.set_connection_timeout(10);
+
+  httplib::Headers headers = {{"APCA-API-KEY-ID", api_key_},
+                              {"APCA-API-SECRET-KEY", api_secret_},
+                              {"Content-Type", "application/json"}};
+
+  // Crypto symbols contain '/', use gtc for crypto, day for stocks
+  auto is_crypto = std::string{symbol}.find('/') != std::string::npos;
+  auto time_in_force = is_crypto ? "gtc" : "day";
+
+  // Build order JSON using quantity (not notional)
+  auto order = json{{"symbol", symbol},
+                    {"side", side},
+                    {"type", "market"},
+                    {"time_in_force", time_in_force},
+                    {"qty", quantity}};
+
+  auto res =
+      client.Post("/v2/orders", headers, order.dump(), "application/json");
+
+  if (not res)
+    return std::unexpected(AlpacaError::NetworkError);
+
+  if (res->status == 401)
+    return std::unexpected(AlpacaError::AuthError);
+
+  if (res->status == 403 or res->status == 422) {
+    std::println(stderr, "Order rejected: status={}, body={}", res->status,
+                 res->body);
+    return std::unexpected(AlpacaError::UnknownError);
+  }
+
+  if (res->status != 200) {
+    std::println(stderr, "Order API error: status={}, body={}", res->status,
+                 res->body);
+    return std::unexpected(AlpacaError::UnknownError);
+  }
+
+  return res->body;
+}
+
+std::expected<std::string, AlpacaError>
 AlpacaClient::close_position(std::string_view symbol) {
   auto client = httplib::Client{base_url_};
   client.set_connection_timeout(10);

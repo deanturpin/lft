@@ -1012,10 +1012,15 @@ void run_live_trading(
 
                 std::println("{}🚨 SIGNAL: {} - {}{}", colour_cyan,
                              signal.strategy_name, signal.reason, colour_reset);
-                std::println("   Buying ${:.0f} of {}...", notional_amount,
-                             symbol);
 
-                auto order = client.place_order(symbol, "buy", notional_amount);
+                // Calculate quantity from notional amount and current price
+                auto current_price = snap.latest_trade_price;
+                auto quantity = notional_amount / current_price;
+
+                std::println("   Buying ${:.0f} of {} ({:.6f} coins at ${:.2f})...",
+                             notional_amount, symbol, quantity, current_price);
+
+                auto order = client.place_order_qty(symbol, "buy", quantity);
                 if (order) {
                   // Parse order response to verify status
                   auto order_json =
@@ -1024,11 +1029,11 @@ void run_live_trading(
                     auto order_id = order_json.value("id", "unknown");
                     auto status = order_json.value("status", "unknown");
                     auto side = order_json.value("side", "unknown");
-                    auto notional_str = order_json.value("notional", "0");
+                    auto qty_str = order_json.value("qty", "0");
 
                     std::println(
-                        "✅ Order placed: ID={} status={} side={} notional=${}",
-                        order_id, status, side, notional_str);
+                        "✅ Order placed: ID={} status={} side={} qty={}",
+                        order_id, status, side, qty_str);
 
                     // Only count as executed if order is accepted
                     if (status == "accepted" or status == "pending_new" or
