@@ -44,9 +44,7 @@ struct Position {
   std::string entry_time;
   std::size_t entry_bar_index{}; // For time-based exit in backtest
   double peak_price{};
-  double take_profit_pct{};
-  double stop_loss_pct{};
-  double trailing_stop_pct{};
+  // Exit criteria are now unified (see exit_logic_tests.h)
 };
 
 struct BacktestStats {
@@ -113,14 +111,12 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
     if (bar.close > pos.peak_price)
       pos.peak_price = bar.close;
 
-    // Calculate trailing stop trigger (price falls below peak by
-    // trailing_stop_pct)
-    auto trailing_stop_price = pos.peak_price * (1.0 - pos.trailing_stop_pct);
+    // Exit conditions using unified exit criteria
+    auto trailing_stop_price = pos.peak_price * (1.0 - trailing_stop_pct);
     auto trailing_stop_triggered = sell_price < trailing_stop_price;
 
-    // Exit conditions using position-specific parameters
-    auto should_exit = pl_pct >= pos.take_profit_pct or
-                       pl_pct <= -pos.stop_loss_pct or
+    auto should_exit = pl_pct >= take_profit_pct or
+                       pl_pct <= -stop_loss_pct or
                        trailing_stop_triggered;
 
     if (should_exit) {
@@ -206,13 +202,6 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
           stats.cash -= actual_cost;
 
           // Calculate adaptive TP/SL based on recent noise
-          auto recent_noise = history.recent_noise(20);
-          const auto &config = configs.at(signal.strategy_name);
-          auto adaptive_tp =
-              adaptive_take_profit(config.take_profit_pct, recent_noise);
-          auto adaptive_sl =
-              adaptive_stop_loss(config.stop_loss_pct, recent_noise);
-
           stats.positions[symbol] =
               Position{.symbol = symbol,
                        .strategy = signal.strategy_name,
@@ -220,10 +209,7 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
                        .quantity = quantity,
                        .entry_time = bar.timestamp,
                        .entry_bar_index = bar_index,
-                       .peak_price = bar.close,        // Peak tracks mid price
-                       .take_profit_pct = adaptive_tp, // Use noise-adjusted TP
-                       .stop_loss_pct = adaptive_sl,   // Use noise-adjusted SL
-                       .trailing_stop_pct = config.trailing_stop_pct};
+                       .peak_price = bar.close}; // Peak tracks mid price
 
           ++stats.strategy_stats[signal.strategy_name].trades_executed;
           ++stats.total_trades;
@@ -328,10 +314,7 @@ lft::StrategyConfig calibrate_strategy(
   auto configs = std::map<std::string, lft::StrategyConfig>{};
   configs[strategy_name] =
       lft::StrategyConfig{.name = strategy_name,
-                          .enabled = true,
-                          .take_profit_pct = take_profit_pct,
-                          .stop_loss_pct = stop_loss_pct,
-                          .trailing_stop_pct = trailing_stop_pct};
+                          .enabled = true};
 
   auto stats = run_backtest_with_data(symbol_bars, configs);
   auto profit = stats.strategy_stats[strategy_name].net_profit();
@@ -731,23 +714,10 @@ void run_live_trading(
             auto pl_pct = (current_price - avg_entry) / avg_entry;
 
             // Get strategy config - use default for orphaned positions
-            auto config = lft::StrategyConfig{};
-            auto strategy = std::string{"unknown"};
-
-            if (position_configs.contains(symbol)) {
-              config = position_configs[symbol];
-              strategy = position_strategies[symbol];
-            } else {
-              // Orphaned position from previous session - use conservative defaults
-              config.take_profit_pct = take_profit_pct;
-              config.stop_loss_pct = stop_loss_pct;
-              config.trailing_stop_pct = trailing_stop_pct;
-              strategy = "orphaned";
-              std::println("{}⚠️  Managing orphaned position: {}{}", colour_yellow,
-                         symbol, colour_reset);
-            }
-
-            const auto &config_ref = config;
+            // Determine strategy name (if known from this session)
+            auto strategy = position_strategies.contains(symbol)
+                            ? position_strategies[symbol]
+                            : std::string{"unknown"};
 
             // Update peak price
             if (not position_peaks.contains(symbol))
@@ -755,14 +725,13 @@ void run_live_trading(
             else if (current_price > position_peaks[symbol])
               position_peaks[symbol] = current_price;
 
-            // Check trailing stop (price falls below peak by trailing_stop_pct)
+            // Exit using unified exit criteria
             auto peak = position_peaks[symbol];
-            auto trailing_stop_price = peak * (1.0 - config_ref.trailing_stop_pct);
+            auto trailing_stop_price = peak * (1.0 - trailing_stop_pct);
             auto trailing_stop_triggered = current_price < trailing_stop_price;
 
-            // Exit using strategy-specific parameters
-            auto should_exit = pl_pct >= config_ref.take_profit_pct or
-                               pl_pct <= -config_ref.stop_loss_pct or
+            auto should_exit = pl_pct >= take_profit_pct or
+                               pl_pct <= -stop_loss_pct or
                                trailing_stop_triggered;
 
             if (should_exit) {
@@ -806,8 +775,8 @@ void run_live_trading(
                   log_trade(symbol, strategy, exit_reason, avg_entry,
                            current_price, unrealized_pl, profit_percent,
                            position_entry_times[symbol], now,
-                           config_ref.take_profit_pct, config_ref.stop_loss_pct,
-                           config_ref.trailing_stop_pct, peak, quantity,
+                           take_profit_pct, stop_loss_pct,
+                           trailing_stop_pct, peak, quantity,
                            cost_basis, account_balance);
                 }
 

@@ -16,13 +16,10 @@ struct StrategySignal {
     double confidence{1.0};  // Signal confidence: 0.0-1.0 (reduced by noise/low volume)
 };
 
-// Strategy-specific exit configuration
+// Strategy configuration (exit criteria are now unified, not per-strategy)
 struct StrategyConfig {
     std::string name;
     bool enabled{false};
-    double take_profit_pct{};
-    double stop_loss_pct{};
-    double trailing_stop_pct{};
     double net_profit{};  // From calibration
     double win_rate{};    // From calibration
 };
