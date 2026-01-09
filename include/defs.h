@@ -3,8 +3,69 @@
 namespace lft {
 
 // Trading parameters
-constexpr auto notional_amount = 1000.0; // Dollar amount per trade
-constexpr auto calibration_days = 30;    // Duration for strategy calibration
+constexpr auto notional_amount = 1000.0;      // Dollar amount per trade
+constexpr auto calibration_days = 30;         // Duration for strategy calibration
+constexpr auto min_trades_to_enable = 10;     // Minimum trades to enable strategy
+
+// Asset watchlists
+#include <string>
+#include <vector>
+
+inline const auto stocks = std::vector<std::string>{
+    // Major indices (high liquidity, consistent data)
+    "DIA", // Dow Jones Industrial Average
+    "QQQ", // Nasdaq 100
+    "SPY", // S&P 500
+    // Big Tech (Magnificent Seven)
+    "AAPL",  // Apple - iPhone, Mac, Services
+    "AMZN",  // Amazon - E-commerce, AWS cloud
+    "GOOGL", // Alphabet (Google) - Search, ads, cloud
+    "META",  // Meta (Facebook) - Social media, ads
+    "MSFT",  // Microsoft - Software, Azure cloud, AI
+    "NVDA",  // NVIDIA - GPUs, AI chips
+    "TSLA",  // Tesla - Electric vehicles, energy
+    // International
+    "ASML", // EU semiconductors
+    "BABA", // China e-commerce
+    "NVO",  // Healthcare (Denmark)
+    "SAP",  // European software
+    "TSM",  // Taiwan Semiconductor
+    // US sectors
+    "BRK.B", // Berkshire Hathaway (diversified value)
+    "JNJ",   // Healthcare
+    "JPM",   // Financials
+    "PG",    // Consumer staples
+    "XOM",   // Energy
+    // Commodities - Precious metals
+    "GLD",  // Gold
+    "SIL",  // Silver miners
+    "SLV",  // Silver (iShares)
+    "SIVR", // Silver (Aberdeen)
+    // Commodities - Energy
+    "UNG", // Natural gas
+    "URA", // Uranium miners
+    "USO", // Oil (United States Oil Fund)
+    // Commodities - Agriculture
+    "CORN", // Corn futures tracker
+    "DBA",  // Agriculture basket
+    "WEAT", // Wheat
+    // Bonds and real estate
+    "IEF", // Mid-term bonds
+    "TLT", // Long-term US bonds
+    "VNQ"  // Real estate
+};
+
+inline const auto crypto = std::vector<std::string>{
+    // Major cryptocurrencies (Layer 1 blockchains)
+    "BTC/USD",  // Bitcoin - Original cryptocurrency, digital gold
+    "ETH/USD",  // Ethereum - Smart contracts, DeFi, NFTs
+    "SOL/USD",  // Solana - High-speed blockchain, low fees
+    "AVAX/USD", // Avalanche - Fast, scalable smart contracts
+    // Meme coins (high volatility)
+    "DOGE/USD", // Dogecoin - Original meme coin
+    // DeFi and infrastructure
+    "LINK/USD"  // Chainlink - Decentralised oracles for smart contracts
+};
 
 // Timing parameters
 constexpr auto poll_interval_seconds = 65; // 60s bar + buffer

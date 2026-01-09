@@ -20,8 +20,8 @@ constexpr auto crypto_spread = 10.0 / 10000.0; // 10 basis points = 0.1%
 
 // Exit parameters (from lft.cxx)
 constexpr auto take_profit_pct = 2_pc;
-constexpr auto stop_loss_pct = 1_pc;
-constexpr auto trailing_stop_pct = 0.5_pc;
+constexpr auto stop_loss_pct = 2_pc;
+constexpr auto trailing_stop_pct = 1_pc;
 
 // Noise and signal analysis
 // Minimum signal-to-noise ratio: signal must be at least 3x the noise

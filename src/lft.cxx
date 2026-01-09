@@ -57,7 +57,8 @@ struct BacktestStats {
 };
 
 // Parse ISO 8601 timestamp from bar data
-std::chrono::system_clock::time_point parse_bar_timestamp(const std::string &timestamp) {
+std::chrono::system_clock::time_point
+parse_bar_timestamp(const std::string &timestamp) {
   // Alpaca bar timestamps are like: "2026-01-08T14:30:00Z"
   std::tm tm = {};
   std::istringstream ss(timestamp);
@@ -85,7 +86,8 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
     auto market_status = get_market_status(bar_time);
 
     if (not market_status.is_open) {
-      return;  // Skip this bar - outside regular trading hours (9:30 AM - 4:00 PM ET)
+      return; // Skip this bar - outside regular trading hours (9:30 AM - 4:00
+              // PM ET)
     }
   }
 
@@ -115,8 +117,7 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
     auto trailing_stop_price = pos.peak_price * (1.0 - trailing_stop_pct);
     auto trailing_stop_triggered = sell_price < trailing_stop_price;
 
-    auto should_exit = pl_pct >= take_profit_pct or
-                       pl_pct <= -stop_loss_pct or
+    auto should_exit = pl_pct >= take_profit_pct or pl_pct <= -stop_loss_pct or
                        trailing_stop_triggered;
 
     if (should_exit) {
@@ -313,8 +314,7 @@ lft::StrategyConfig calibrate_strategy(
   // Create config with fixed exit parameters
   auto configs = std::map<std::string, lft::StrategyConfig>{};
   configs[strategy_name] =
-      lft::StrategyConfig{.name = strategy_name,
-                          .enabled = true};
+      lft::StrategyConfig{.name = strategy_name, .enabled = true};
 
   auto stats = run_backtest_with_data(symbol_bars, configs);
   auto profit = stats.strategy_stats[strategy_name].net_profit();
@@ -323,6 +323,7 @@ lft::StrategyConfig calibrate_strategy(
   auto win_rate = stats.strategy_stats[strategy_name].win_rate();
 
   auto config = configs[strategy_name];
+  config.trades_closed = trades;
   config.net_profit = profit;
   config.win_rate = win_rate;
 
@@ -353,6 +354,9 @@ calibrate_all_strategies(lft::AlpacaClient &client,
 
   // Fetch historic data ONCE upfront (huge speedup!)
   std::println("\n{}📥 Fetching historic data{}", colour_yellow, colour_reset);
+  std::println("{:-<50}", "");
+  std::println("{:<10} {:>15} {:>15}", "SYMBOL", "BARS", "TYPE");
+  std::println("{:-<50}", "");
 
   // Fetch most recent available data (end at yesterday to avoid "recent SIP
   // data" restriction)
@@ -373,19 +377,20 @@ calibrate_all_strategies(lft::AlpacaClient &client,
 
     if (bars) {
       symbol_bars[symbol] = std::move(*bars);
-      std::println("  {} - {} bars", symbol, symbol_bars[symbol].size());
+      auto asset_type = is_crypto ? "Crypto" : "Stock";
+      std::println("{:<10} {:>15} {:>15}", symbol, symbol_bars[symbol].size(),
+                   asset_type);
     }
   }
 
+  std::println("{:-<50}", "");
   std::println("{}✓ Data fetched - ready for calibration{}\n", colour_green,
                colour_reset);
 
-  auto strategies = std::vector<std::string>{// "dip",  // Disabled: loses heavily with tight stops
-                                             "ma_crossover",
-                                             "mean_reversion",
-                                             "volatility_breakout",
-                                             "relative_strength",
-                                             "volume_surge"};
+  auto strategies = std::vector<std::string>{
+      // "dip",  // Disabled: loses heavily with tight stops
+      "ma_crossover", "mean_reversion", "volatility_breakout",
+      "relative_strength", "volume_surge"};
 
   // Calibrate all strategies in parallel using threads
   auto strategy_configs = std::vector<lft::StrategyConfig>(strategies.size());
@@ -394,7 +399,11 @@ calibrate_all_strategies(lft::AlpacaClient &client,
   for (auto i = 0uz; i < strategies.size(); ++i) {
     threads.emplace_back([i, &strategies, &strategy_configs, &symbol_bars]() {
       auto config = calibrate_strategy(strategies[i], symbol_bars);
-      config.enabled = config.net_profit > 0.0; // Only enable if profitable
+
+      // Enable if profitable AND has sufficient trade history
+      config.enabled = config.net_profit > 0.0 and
+                       config.trades_closed >= min_trades_to_enable;
+
       strategy_configs[i] = config;
     });
   }
@@ -442,7 +451,7 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
 
   // Use timestamp-aware method to avoid adding stale trades
   history.add_price_with_timestamp(snap.latest_trade_price,
-                                     snap.latest_trade_timestamp);
+                                   snap.latest_trade_timestamp);
 
   if (history.has_history) {
     if (history.change_percent > 0.0)
@@ -574,53 +583,71 @@ void print_strategy_stats(
   std::println("");
 }
 
-void log_trade(std::string_view symbol, std::string_view strategy,
-               std::string_view exit_reason, double entry_price,
-               double exit_price, double profit, double profit_pct,
-               const std::chrono::system_clock::time_point &entry_time,
-               const std::chrono::system_clock::time_point &exit_time,
-               double take_profit_pct, double stop_loss_pct,
-               double trailing_stop_pct, double peak_price, double quantity,
-               double notional, double account_balance) {
+void log_order_entry(std::string_view symbol, std::string_view strategy,
+                     std::string_view order_id, double entry_price,
+                     double quantity, double notional,
+                     const std::chrono::system_clock::time_point &entry_time,
+                     double account_balance) {
 
-  auto filename = std::string{"lft_trades.csv"};
+  auto filename = std::string{"lft_orders.csv"};
 
   // Check if file exists to determine if we need to write header
   auto file_exists = std::ifstream{filename}.good();
 
   auto file = std::ofstream{filename, std::ios::app};
   if (not file.is_open()) {
-    std::println("{}⚠  Failed to write trade log: {}{}", colour_yellow,
-                 filename, colour_reset);
+    std::println("{}⚠  Failed to write order log: {}{}", colour_yellow, filename,
+                 colour_reset);
     return;
   }
 
-  // Write comprehensive header if new file
+  // Write header if new file
   if (not file_exists)
-    file << "entry_time,exit_time,symbol,strategy,entry_price,exit_price,"
-         << "profit,profit_pct,exit_reason,hold_duration_minutes,"
-         << "take_profit_pct,stop_loss_pct,trailing_stop_pct,peak_price,"
-         << "quantity,notional,account_balance,profit_per_dollar\n";
+    file << "timestamp,symbol,strategy,order_id,entry_price,quantity,notional,"
+            "account_balance\n";
 
-  // Calculate hold duration
-  auto duration = std::chrono::duration<double>(exit_time - entry_time).count();
-  auto hold_minutes = static_cast<long long>(duration / 60.0);
-
-  // Calculate profit per dollar invested (ROI)
-  auto profit_per_dollar = notional > 0.0 ? profit / notional : 0.0;
-
-  // Write comprehensive trade data
-  file << std::format(
-      "{:%Y-%m-%d %H:%M:%S},{:%Y-%m-%d %H:%M:%S},{},{},{:.4f},{:.4f},"
-      "{:.2f},{:.2f}%,{},{},{:.2f}%,{:.2f}%,{:.2f}%,{:.4f},{:.6f},{:.2f},{:.2f},{:.6f}\n",
-      entry_time, exit_time, symbol, strategy, entry_price, exit_price, profit,
-      profit_pct, exit_reason, hold_minutes, take_profit_pct * 100.0,
-      stop_loss_pct * 100.0, trailing_stop_pct * 100.0, peak_price, quantity,
-      notional, account_balance, profit_per_dollar);
+  // Write order entry data
+  file << std::format("{:%Y-%m-%d %H:%M:%S},{},{},{},{:.4f},{:.6f},{:.2f},"
+                      "{:.2f}\n",
+                      entry_time, symbol, strategy, order_id, entry_price,
+                      quantity, notional, account_balance);
 
   file.close();
 
-  std::println("{}📝 Trade logged to: {}{}", colour_green, filename,
+  std::println("{}📝 Order logged to: {}{}", colour_green, filename,
+               colour_reset);
+}
+
+void log_exit(std::string_view symbol, std::string_view order_id,
+               std::string_view exit_reason, double exit_price,
+               const std::chrono::system_clock::time_point &exit_time,
+               double peak_price, double account_balance) {
+
+  auto filename = std::string{"lft_exits.csv"};
+
+  // Check if file exists to determine if we need to write header
+  auto file_exists = std::ifstream{filename}.good();
+
+  auto file = std::ofstream{filename, std::ios::app};
+  if (not file.is_open()) {
+    std::println("{}⚠  Failed to write exit log: {}{}", colour_yellow, filename,
+                 colour_reset);
+    return;
+  }
+
+  // Write header if new file
+  if (not file_exists)
+    file << "timestamp,symbol,order_id,exit_price,exit_reason,peak_price,"
+            "account_balance\n";
+
+  // Write exit data
+  file << std::format("{:%Y-%m-%d %H:%M:%S},{},{},{:.4f},{},{:.4f},{:.2f}\n",
+                      exit_time, symbol, order_id, exit_price, exit_reason,
+                      peak_price, account_balance);
+
+  file.close();
+
+  std::println("{}📝 Exit logged to: {}{}", colour_green, filename,
                colour_reset);
 }
 
@@ -636,12 +663,12 @@ void run_live_trading(
 
   auto price_histories = std::map<std::string, lft::PriceHistory>{};
   auto position_strategies = std::map<std::string, std::string>{};
-  auto position_configs = std::map<std::string, lft::StrategyConfig>{};
   auto position_peaks = std::map<std::string, double>{};
   auto position_entry_times =
       std::map<std::string, std::chrono::system_clock::time_point>{};
-  auto existing_positions = std::set<std::string>{};
+  auto position_order_ids = std::map<std::string, std::string>{};
   auto strategy_stats = std::map<std::string, lft::StrategyStats>{};
+  auto api_positions = std::set<std::string>{}; // API is source of truth
 
   // Initialise stats for ALL strategies (enabled and disabled)
   for (const auto &[name, config] : configs)
@@ -659,24 +686,40 @@ void run_live_trading(
     // Display account status
     print_account_stats(client, now);
 
-    // Fetch and process positions
+    // Fetch and process positions (API is source of truth)
     auto positions_result = client.get_positions();
+
     if (positions_result) {
       auto positions_json =
           nlohmann::json::parse(positions_result.value(), nullptr, false);
 
       if (not positions_json.is_discarded()) {
-        existing_positions.clear();
-        for (const auto &pos : positions_json)
-          existing_positions.insert(pos["symbol"].get<std::string>());
+        // DEBUG: Log what API returned
+        std::println("{}🔍 DEBUG: API returned {} positions{}", colour_yellow,
+                     positions_json.size(), colour_reset);
+
+        // Extract symbol names from API positions (API is source of truth)
+        api_positions.clear();
+        for (const auto &pos : positions_json) {
+          auto sym = pos["symbol"].get<std::string>();
+          api_positions.insert(sym);
+          std::println("{}  API position: {}{}", colour_yellow, sym, colour_reset);
+        }
+
+        // DEBUG: Show tracked positions
+        std::println("{}🔍 DEBUG: Tracking {} positions{}", colour_yellow,
+                     api_positions.size(), colour_reset);
+        for (const auto &sym : api_positions) {
+          std::println("{}  Tracked: {}{}", colour_yellow, sym, colour_reset);
+        }
 
         if (not positions_json.empty()) {
           std::println("\n📊 OPEN POSITIONS");
-          std::println("{:-<100}", "");
-          std::println("{:<10} {:>10} {:>15} {:>15} {:>15} {:>10} {:<18}",
-                       "SYMBOL", "QTY", "ENTRY PRICE", "CURRENT PRICE",
-                       "MARKET VALUE", "P&L %", "STRATEGY");
-          std::println("{:-<100}", "");
+          std::println("{:-<82}", "");
+          std::println("{:<10} {:>10} {:>15} {:>15} {:>15} {:>10}", "SYMBOL",
+                       "QTY", "ENTRY PRICE", "CURRENT PRICE", "MARKET VALUE",
+                       "P&L %");
+          std::println("{:-<82}", "");
 
           for (const auto &pos : positions_json) {
             auto symbol = pos["symbol"].get<std::string>();
@@ -690,14 +733,11 @@ void run_live_trading(
                 std::stod(pos["unrealized_plpc"].get<std::string>()) * 100.0;
 
             auto colour = unrealized_plpc >= 0.0 ? colour_green : colour_red;
-            auto strategy = position_strategies.contains(symbol)
-                                ? position_strategies[symbol]
-                                : "manual";
 
-            std::println("{}{:<10} {:>10} {:>15.2f} {:>15.2f} {:>15.2f} "
-                         "{:>9.2f}% {:<18}{}",
-                         colour, symbol, qty, avg_entry, current, market_value,
-                         unrealized_plpc, strategy, colour_reset);
+            std::println(
+                "{}{:<10} {:>10} {:>15.2f} {:>15.2f} {:>15.2f} {:>9.2f}%{}",
+                colour, symbol, qty, avg_entry, current, market_value,
+                unrealized_plpc, colour_reset);
           }
           std::println("");
 
@@ -716,8 +756,8 @@ void run_live_trading(
             // Get strategy config - use default for orphaned positions
             // Determine strategy name (if known from this session)
             auto strategy = position_strategies.contains(symbol)
-                            ? position_strategies[symbol]
-                            : std::string{"unknown"};
+                                ? position_strategies[symbol]
+                                : std::string{"unknown"};
 
             // Update peak price
             if (not position_peaks.contains(symbol))
@@ -753,31 +793,26 @@ void run_live_trading(
               auto close_result = client.close_position(symbol);
               if (close_result) {
                 std::println("✅ Position closed: {}", symbol);
-                existing_positions.erase(symbol);
 
-                // Log the trade with full details
+                // Log the exit with full details
                 if (position_entry_times.contains(symbol)) {
-                  // Get quantity from position
-                  auto qty_str = pos["qty"].get<std::string>();
-                  auto quantity = std::stod(qty_str);
-
                   // Get current account balance
                   auto account_balance = 0.0;
                   auto account_result = client.get_account();
                   if (account_result) {
-                    auto account_json =
-                        nlohmann::json::parse(account_result.value(), nullptr, false);
+                    auto account_json = nlohmann::json::parse(
+                        account_result.value(), nullptr, false);
                     if (not account_json.is_discarded())
-                      account_balance =
-                          std::stod(account_json["portfolio_value"].get<std::string>());
+                      account_balance = std::stod(
+                          account_json["portfolio_value"].get<std::string>());
                   }
 
-                  log_trade(symbol, strategy, exit_reason, avg_entry,
-                           current_price, unrealized_pl, profit_percent,
-                           position_entry_times[symbol], now,
-                           take_profit_pct, stop_loss_pct,
-                           trailing_stop_pct, peak, quantity,
-                           cost_basis, account_balance);
+                  // Log exit with order ID if we have it
+                  auto order_id = position_order_ids.contains(symbol)
+                                      ? position_order_ids[symbol]
+                                      : "unknown";
+                  log_exit(symbol, order_id, exit_reason, current_price, now,
+                           peak, account_balance);
                 }
 
                 if (strategy_stats.contains(strategy)) {
@@ -792,7 +827,6 @@ void run_live_trading(
                 }
 
                 position_strategies.erase(symbol);
-                position_configs.erase(symbol);
                 position_peaks.erase(symbol);
                 position_entry_times.erase(symbol);
               } else {
@@ -821,7 +855,8 @@ void run_live_trading(
 
           // Entry logic - only for enabled strategies
           auto signals = std::vector<lft::StrategySignal>{
-              // lft::Strategies::evaluate_dip(history, dip_threshold),  // Disabled
+              // lft::Strategies::evaluate_dip(history, dip_threshold),  //
+              // Disabled
               lft::Strategies::evaluate_ma_crossover(history),
               lft::Strategies::evaluate_mean_reversion(history),
               lft::Strategies::evaluate_volatility_breakout(history),
@@ -835,7 +870,9 @@ void run_live_trading(
               ++strategy_stats[signal.strategy_name].signals_generated;
           }
 
-          if (not existing_positions.contains(symbol)) {
+          if (not api_positions.contains(symbol)) {
+            std::println("{}🔍 DEBUG: {} not in api_positions - checking signals{}",
+                         colour_yellow, symbol, colour_reset);
             // Execute first enabled signal
             for (const auto &signal : signals) {
               if (signal.should_buy and
@@ -865,21 +902,43 @@ void run_live_trading(
                     // Only count as executed if order is accepted
                     if (status == "accepted" or status == "pending_new" or
                         status == "filled") {
-                      existing_positions.insert(symbol);
                       position_strategies[symbol] = signal.strategy_name;
-                      position_configs[symbol] =
-                          configs.at(signal.strategy_name);
                       position_entry_times[symbol] = now;
+                      position_order_ids[symbol] = order_id;
                       ++strategy_stats[signal.strategy_name].trades_executed;
+
+                      // Log order entry with account balance
+                      auto account_result = client.get_account();
+                      auto balance = 0.0;
+                      if (account_result) {
+                        auto account_json = nlohmann::json::parse(
+                            account_result.value(), nullptr, false);
+                        if (not account_json.is_discarded())
+                          balance = std::stod(
+                              account_json["equity"].get<std::string>());
+                      }
+
+                      // Estimate filled price and quantity from order response
+                      auto filled_price =
+                          order_json.contains("filled_avg_price")
+                              ? std::stod(
+                                    order_json["filled_avg_price"].get<std::string>())
+                              : 0.0;
+                      auto quantity_filled =
+                          order_json.contains("filled_qty")
+                              ? std::stod(order_json["filled_qty"].get<std::string>())
+                              : notional_amount / filled_price;
+
+                      log_order_entry(symbol, signal.strategy_name, order_id,
+                                      filled_price, quantity_filled, notional_amount,
+                                      now, balance);
                     } else {
                       std::println("{}⚠  Order status '{}' - may not execute{}",
                                    colour_yellow, status, colour_reset);
                     }
                   } else {
                     std::println("✅ Order placed (could not parse response)");
-                    existing_positions.insert(symbol);
                     position_strategies[symbol] = signal.strategy_name;
-                    position_configs[symbol] = configs.at(signal.strategy_name);
                     position_entry_times[symbol] = now;
                     ++strategy_stats[signal.strategy_name].trades_executed;
                   }
@@ -918,7 +977,8 @@ void run_live_trading(
 
           // Entry logic - only for enabled strategies
           auto signals = std::vector<lft::StrategySignal>{
-              // lft::Strategies::evaluate_dip(history, dip_threshold),  // Disabled
+              // lft::Strategies::evaluate_dip(history, dip_threshold),  //
+              // Disabled
               lft::Strategies::evaluate_ma_crossover(history),
               lft::Strategies::evaluate_mean_reversion(history),
               lft::Strategies::evaluate_volatility_breakout(history),
@@ -932,7 +992,9 @@ void run_live_trading(
               ++strategy_stats[signal.strategy_name].signals_generated;
           }
 
-          if (not existing_positions.contains(symbol)) {
+          if (not api_positions.contains(symbol)) {
+            std::println("{}🔍 DEBUG: {} not in api_positions - checking signals{}",
+                         colour_yellow, symbol, colour_reset);
             // Execute first enabled signal
             for (const auto &signal : signals) {
               if (signal.should_buy and
@@ -941,15 +1003,10 @@ void run_live_trading(
 
                 std::println("{}🚨 SIGNAL: {} - {}{}", colour_cyan,
                              signal.strategy_name, signal.reason, colour_reset);
+                std::println("   Buying ${:.0f} of {}...", notional_amount,
+                             symbol);
 
-                // Calculate quantity from notional amount and current price
-                auto current_price = snap.latest_trade_price;
-                auto quantity = notional_amount / current_price;
-
-                std::println("   Buying ${:.0f} of {} ({:.6f} coins at ${:.2f})...",
-                             notional_amount, symbol, quantity, current_price);
-
-                auto order = client.place_order_qty(symbol, "buy", quantity);
+                auto order = client.place_order(symbol, "buy", notional_amount);
                 if (order) {
                   // Parse order response to verify status
                   auto order_json =
@@ -958,30 +1015,52 @@ void run_live_trading(
                     auto order_id = order_json.value("id", "unknown");
                     auto status = order_json.value("status", "unknown");
                     auto side = order_json.value("side", "unknown");
-                    auto qty_str = order_json.value("qty", "0");
+                    auto notional_str = order_json.value("notional", "0");
 
                     std::println(
-                        "✅ Order placed: ID={} status={} side={} qty={}",
-                        order_id, status, side, qty_str);
+                        "✅ Order placed: ID={} status={} side={} notional=${}",
+                        order_id, status, side, notional_str);
 
                     // Only count as executed if order is accepted
                     if (status == "accepted" or status == "pending_new" or
                         status == "filled") {
-                      existing_positions.insert(symbol);
                       position_strategies[symbol] = signal.strategy_name;
-                      position_configs[symbol] =
-                          configs.at(signal.strategy_name);
                       position_entry_times[symbol] = now;
+                      position_order_ids[symbol] = order_id;
                       ++strategy_stats[signal.strategy_name].trades_executed;
+
+                      // Log order entry with account balance
+                      auto account_result = client.get_account();
+                      auto balance = 0.0;
+                      if (account_result) {
+                        auto account_json = nlohmann::json::parse(
+                            account_result.value(), nullptr, false);
+                        if (not account_json.is_discarded())
+                          balance = std::stod(
+                              account_json["equity"].get<std::string>());
+                      }
+
+                      // Estimate filled price and quantity from order response
+                      auto filled_price =
+                          order_json.contains("filled_avg_price")
+                              ? std::stod(
+                                    order_json["filled_avg_price"].get<std::string>())
+                              : 0.0;
+                      auto quantity_filled =
+                          order_json.contains("filled_qty")
+                              ? std::stod(order_json["filled_qty"].get<std::string>())
+                              : notional_amount / filled_price;
+
+                      log_order_entry(symbol, signal.strategy_name, order_id,
+                                      filled_price, quantity_filled, notional_amount,
+                                      now, balance);
                     } else {
                       std::println("{}⚠  Order status '{}' - may not execute{}",
                                    colour_yellow, status, colour_reset);
                     }
                   } else {
                     std::println("✅ Order placed (could not parse response)");
-                    existing_positions.insert(symbol);
                     position_strategies[symbol] = signal.strategy_name;
-                    position_configs[symbol] = configs.at(signal.strategy_name);
                     position_entry_times[symbol] = now;
                     ++strategy_stats[signal.strategy_name].trades_executed;
                   }
@@ -1021,7 +1100,6 @@ void run_live_trading(
         next_update, cycles_remaining);
     std::this_thread::sleep_for(std::chrono::seconds{poll_interval_seconds});
   }
-
 }
 
 } // anonymous namespace
@@ -1036,42 +1114,6 @@ int main() {
 
   std::println("{}🤖 LFT - LOW FREQUENCY TRADER{}", colour_cyan, colour_reset);
   std::println("Calibrate → Execute Workflow\n");
-
-  // Same watchlist as live ticker
-  auto stocks = std::vector<std::string>{
-      "AAPL",  "TSLA", "NVDA", "MSFT", "GOOGL", "AMZN", "META",
-      "BRK.B", // Berkshire Hathaway (diversified value)
-      "JPM",   // Financials
-      "JNJ",   // Healthcare
-      "PG",    // Consumer staples
-      "XOM",   // Energy
-      "ASML",  // EU semiconductors
-      "TSM",   // Taiwan Semiconductor
-      "NVO",   // Healthcare (Denmark)
-      "SAP",   // European software
-      "BABA",  // China e-commerce
-      "GLD",   // Gold
-      "SLV",   // Silver (iShares)
-      "SIVR",  // Silver (Aberdeen)
-      "SIL",   // Silver miners
-      "SLVR",  // Silver (Abrdn)
-      "USO",   // Oil (United States Oil Fund)
-      "UNG",   // Natural gas
-      "DBA",   // Agriculture basket
-      "CORN",  // Corn futures tracker
-      "WEAT",  // Wheat
-      "URA",   // Uranium miners
-      "TLT",   // Long-term US bonds
-      "IEF",   // Mid-term bonds
-      "VNQ"    // Real estate
-  };
-
-  auto crypto = std::vector<std::string>{
-      "BTC/USD",  "ETH/USD", "SOL/USD", "DOGE/USD",
-      "LINK/USD", // Oracles
-      "AVAX/USD", // Alternative L1
-      "ATOM/USD", // Cosmos ecosystem
-  };
 
   // Phase 1: Calibrate
   auto configs = calibrate_all_strategies(client, stocks, crypto);
@@ -1088,8 +1130,9 @@ int main() {
                  colour_yellow, colour_reset);
 
   // 10-second countdown before live trading starts
-  std::println("\n{}⚠ STARTING LIVE TRADING IN 10 SECONDS - Press Ctrl+C to cancel{}",
-               colour_yellow, colour_reset);
+  std::println(
+      "\n{}⚠ STARTING LIVE TRADING IN 10 SECONDS - Press Ctrl+C to cancel{}",
+      colour_yellow, colour_reset);
   for (auto i = 10; i > 0; --i) {
     std::println("{}...", i);
     std::this_thread::sleep_for(1s);

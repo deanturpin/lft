@@ -1,0 +1,4 @@
+entry_time,exit_time,symbol,strategy,entry_price,exit_price,profit,profit_pct,exit_reason,hold_duration_minutes,take_profit_pct,stop_loss_pct,trailing_stop_pct,peak_price,quantity,notional,account_balance,profit_per_dollar
+2026-01-09 14:30:04.672843,2026-01-09 14:51:35.603205,URA,relative_strength,51.9100,52.1200,4.05,0.40%,TRAILING STOP,21,2.00%,2.00%,1.00%,52.7500,19.263918,999.99,99179.70,0.004045
+2026-01-09 14:30:04.672843,2026-01-09 15:02:57.489337,ASML,relative_strength,1225.1100,1249.7500,20.11,2.01%,PROFIT TARGET,32,2.00%,2.00%,1.00%,1249.7500,0.816245,999.99,99206.40,0.020112
+2026-01-09 14:43:38.960338,2026-01-09 15:02:57.489337,UNG,relative_strength,11.1000,10.9950,-9.46,-0.95%,TRAILING STOP,19,2.00%,2.00%,1.00%,11.1150,90.089189,999.99,99205.72,-0.009459

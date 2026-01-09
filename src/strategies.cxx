@@ -5,6 +5,129 @@
 
 namespace lft {
 
+// PriceHistory implementation
+
+void PriceHistory::add_price_with_timestamp(double price, std::string_view timestamp) {
+    // Only add if this is a NEW trade (different timestamp)
+    if (timestamp.empty() or timestamp != last_trade_timestamp) {
+        prices.push_back(price);
+        last_trade_timestamp = std::string{timestamp};
+
+        // Keep last 100 data points for moving averages
+        if (prices.size() > 100)
+            prices.erase(prices.begin());
+
+        if (prices.size() >= 2) {
+            last_price = prices[prices.size() - 2];
+            change_percent = ((price - last_price) / last_price) * 100.0;
+            has_history = true;
+        }
+    }
+    // If same timestamp: do nothing, preserve existing change_percent
+}
+
+void PriceHistory::add_price(double price) {
+    prices.push_back(price);
+    // Keep last 100 data points for moving averages
+    if (prices.size() > 100)
+        prices.erase(prices.begin());
+
+    if (prices.size() >= 2) {
+        last_price = prices[prices.size() - 2];
+        change_percent = ((price - last_price) / last_price) * 100.0;
+        has_history = true;
+    }
+}
+
+void PriceHistory::add_bar(double close, double high, double low, long volume) {
+    add_price(close);
+    highs.push_back(high);
+    lows.push_back(low);
+    volumes.push_back(volume);
+
+    // Keep synced with prices
+    if (highs.size() > 100)
+        highs.erase(highs.begin());
+    if (lows.size() > 100)
+        lows.erase(lows.begin());
+    if (volumes.size() > 100)
+        volumes.erase(volumes.begin());
+}
+
+double PriceHistory::moving_average(size_t periods) const {
+    if (prices.size() < periods)
+        return 0.0;
+
+    auto sum = 0.0;
+    for (auto i = prices.size() - periods; i < prices.size(); ++i)
+        sum += prices[i];
+
+    return sum / periods;
+}
+
+double PriceHistory::volatility() const {
+    if (prices.size() < 2)
+        return 0.0;
+
+    auto mean = moving_average(prices.size());
+    auto variance = 0.0;
+
+    for (const auto& price : prices) {
+        auto diff = price - mean;
+        variance += diff * diff;
+    }
+
+    return std::sqrt(variance / prices.size());
+}
+
+double PriceHistory::recent_noise(size_t periods) const {
+    if (highs.size() < periods or lows.size() < periods or prices.size() < periods)
+        return 0.0;
+
+    auto total_noise = 0.0;
+    auto start_idx = prices.size() - periods;
+
+    for (auto i = start_idx; i < prices.size(); ++i) {
+        auto noise = (highs[i] - lows[i]) / prices[i];
+        total_noise += noise;
+    }
+
+    return total_noise / periods;
+}
+
+long PriceHistory::avg_volume() const {
+    if (volumes.empty())
+        return 0;
+
+    auto sum = 0L;
+    for (auto vol : volumes)
+        sum += vol;
+
+    return sum / static_cast<long>(volumes.size());
+}
+
+double PriceHistory::volume_factor() const {
+    if (volumes.empty())
+        return 1.0;
+
+    auto current_vol = volumes.back();
+    auto avg = avg_volume();
+
+    if (avg == 0)
+        return 1.0;
+
+    // Low volume (<50% avg) → penalise confidence
+    auto vol_ratio = static_cast<double>(current_vol) / avg;
+    if (vol_ratio < 0.5)
+        return 1.5;  // 50% confidence penalty
+    else if (vol_ratio < 0.75)
+        return 1.2;  // 20% confidence penalty
+    else
+        return 1.0;  // Normal confidence
+}
+
+// Strategy implementations
+
 StrategySignal Strategies::evaluate_dip(const PriceHistory& history, double threshold) {
     // Defensive assertions: threshold should be negative for a "dip"
     assert(threshold < 0.0 && "Dip threshold must be negative");

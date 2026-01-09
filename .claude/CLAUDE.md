@@ -33,6 +33,6 @@ Low Frequency Trader - algorithmic trading system for US stocks and ETFs built i
 
 ## Development Style
 
-- Currently in exploration/planning phase
 - User prefers to discuss and decide before implementing
 - Take time to explain options and trade-offs
+- **Do not auto-commit changes** - always ask before committing
