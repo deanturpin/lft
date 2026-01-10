@@ -2,6 +2,7 @@
 #include "defs.h"
 #include "strategies.h"
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <format>
 #include <fstream>
@@ -250,8 +251,17 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
           if (future_index < bars.size()) {
             auto current_price = bar.close;
             auto future_price = bars[future_index].close;
+
+            assert(current_price > 0.0 && "Current price must be positive");
+            assert(future_price > 0.0 && "Future price must be positive");
+            assert(std::isfinite(current_price) && "Current price must be finite");
+            assert(std::isfinite(future_price) && "Future price must be finite");
+
             auto forward_return_pct = (future_price - current_price) / current_price;
             auto forward_return_bps = forward_return_pct * 10000.0; // Convert to bps
+
+            assert(std::isfinite(forward_return_bps) && "Forward return must be finite");
+            assert(std::abs(forward_return_bps) < 10000.0 && "Forward return unreasonably large (>10000 bps = 100%)");
 
             // Track forward returns
             auto &strat_stats = stats.strategy_stats[signal.strategy_name];
@@ -582,12 +592,24 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
 
 // Calculate total estimated costs for a trade in basis points
 constexpr double calculate_total_cost_bps(double spread_bps) {
+  assert(spread_bps >= 0.0 && "Spread cannot be negative");
+  assert(spread_bps < 1000.0 && "Spread unreasonably high (>1000 bps)");
+
   // Total cost = spread + slippage buffer + adverse selection
-  return spread_bps + slippage_buffer_bps + adverse_selection_bps;
+  auto total = spread_bps + slippage_buffer_bps + adverse_selection_bps;
+
+  assert(total > 0.0 && "Total cost must be positive");
+  assert(total < 200.0 && "Total cost unreasonably high (>200 bps)");
+
+  return total;
 }
 
 // Check if trade has positive edge after costs
 constexpr bool has_positive_edge(double expected_move_bps, double total_cost_bps) {
+  assert(expected_move_bps >= 0.0 && "Expected move cannot be negative");
+  assert(total_cost_bps > 0.0 && "Total cost must be positive");
+  assert(expected_move_bps < 10000.0 && "Expected move unreasonably high (>10000 bps)");
+
   auto net_edge_bps = expected_move_bps - total_cost_bps;
   return net_edge_bps >= min_edge_bps;
 }
@@ -788,10 +810,22 @@ void log_order_entry(std::string_view symbol, std::string_view strategy,
   if (not file_exists)
     file << orders_csv_header;
 
+  // Defensive checks on input values
+  assert(expected_price > 0.0 && "Expected price must be positive");
+  assert(entry_price > 0.0 && "Entry price must be positive");
+  assert(quantity > 0.0 && "Quantity must be positive");
+  assert(notional > 0.0 && "Notional must be positive");
+  assert(spread_pct >= 0.0 && spread_pct < 100.0 && "Spread % must be 0-100%");
+  assert(std::isfinite(expected_price) && "Expected price must be finite");
+  assert(std::isfinite(entry_price) && "Entry price must be finite");
+
   // Calculate slippage
   auto slippage_abs = entry_price - expected_price;
   auto slippage_pct =
       expected_price > 0.0 ? (slippage_abs / expected_price) * 100.0 : 0.0;
+
+  assert(std::isfinite(slippage_abs) && "Slippage must be finite");
+  assert(std::abs(slippage_pct) < 50.0 && "Slippage unreasonably large (>50%)");
 
   // Write order entry data with slippage metrics
   file << std::format(
