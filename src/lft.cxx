@@ -160,20 +160,6 @@ parse_bar_timestamp(const std::string &timestamp) {
   return std::chrono::system_clock::from_time_t(std::mktime(&tm));
 }
 
-// Calculate sleep duration to align to 35 seconds past the next minute
-// Alpaca recalculates bars at :30 past each minute to include late trades
-// Polling at :35 ensures we get the final, recalculated bar data
-std::chrono::seconds
-sleep_until_bar_ready(const std::chrono::system_clock::time_point &now) {
-  using namespace std::chrono;
-
-  // Round up to next minute, then add 35 seconds
-  auto next_minute = ceil<minutes>(now);
-  auto target_time = next_minute + 35s;
-
-  return duration_cast<seconds>(target_time - now);
-}
-
 // Check if symbol is a crypto pair (contains '/')
 constexpr bool is_crypto(std::string_view symbol) {
   return symbol.find('/') != std::string_view::npos;
@@ -1554,10 +1540,8 @@ void run_live_trading(
     // Print stats
     print_strategy_stats(strategy_stats);
 
-    // Calculate sleep duration to align to :35 past next minute
-    auto sleep_duration = sleep_until_bar_ready(now);
-    auto next_update =
-        std::chrono::floor<std::chrono::seconds>(now + sleep_duration);
+    // Sleep until :35 past next minute (after Alpaca's :30 bar recalculation)
+    auto next_update = std::chrono::ceil<std::chrono::minutes>(now) + 35s;
     auto cycles_remaining = max_cycles - cycle;
 
     std::println("\n⏳ Next update at {:%H:%M:%S} | {} cycles remaining\n",
