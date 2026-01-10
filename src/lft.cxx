@@ -476,9 +476,9 @@ calibrate_all_strategies(lft::AlpacaClient &client,
 }
 
 void print_header() {
-  std::println("\n{:<10} {:>12} {:>12} {:>12} {:>10} {}", "SYMBOL", "LAST",
-               "BID", "ASK", "CHANGE%", "STATUS");
-  std::println("{:-<70}", "");
+  std::println("\n{:<10} {:>12} {:>12} {:>12} {:>10} {:>8} {}", "SYMBOL",
+               "LAST", "BID", "ASK", "CHANGE%", "SPREAD%", "STATUS");
+  std::println("{:-<80}", "");
 }
 
 void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
@@ -490,6 +490,11 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
   // Use timestamp-aware method to avoid adding stale trades
   history.add_price_with_timestamp(snap.latest_trade_price,
                                    snap.latest_trade_timestamp);
+
+  // Calculate bid-ask spread for trading viability assessment
+  auto spread_abs = snap.latest_quote_ask - snap.latest_quote_bid;
+  auto mid_price = (snap.latest_quote_bid + snap.latest_quote_ask) / 2.0;
+  auto spread_pct = mid_price > 0.0 ? (spread_abs / mid_price) * 100.0 : 0.0;
 
   if (history.has_history) {
     if (history.change_percent > 0.0)
@@ -504,10 +509,17 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
       status = "🚨 ALERT";
   }
 
-  std::println("{}{:<10} {:>12.2f} {:>12.2f} {:>12.2f} {:>9.2f}% {}{}", colour,
-               symbol, snap.latest_trade_price, snap.latest_quote_bid,
-               snap.latest_quote_ask, history.change_percent, status,
-               colour_reset);
+  // Assess trading viability based on spread
+  // Wide spreads indicate poor liquidity and higher transaction costs
+  if (spread_pct > 2.0)
+    status += status.empty() ? "💸 WIDE SPREAD" : " 💸";
+  else if (spread_pct > 1.0)
+    status += status.empty() ? "⚠️ HIGH SPREAD" : " ⚠️$";
+
+  std::println("{}{:<10} {:>12.2f} {:>12.2f} {:>12.2f} {:>9.2f}% {:>7.3f}% {}{}",
+               colour, symbol, snap.latest_trade_price, snap.latest_quote_bid,
+               snap.latest_quote_ask, history.change_percent, spread_pct,
+               status, colour_reset);
 }
 
 // Check if US stock market is open and time until open/close
