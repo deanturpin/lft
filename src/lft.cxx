@@ -84,7 +84,8 @@ struct MarketStatus {
 };
 
 // Check if US stock market is open and time until open/close
-MarketStatus get_market_status(const std::chrono::system_clock::time_point &now) {
+MarketStatus
+get_market_status(const std::chrono::system_clock::time_point &now) {
   using namespace std::chrono;
 
   // Convert to time_t to get weekday
@@ -218,7 +219,8 @@ void process_bar(
     auto market_status = get_market_status(bar_time);
 
     if (not market_status.is_open)
-      return; // Skip this bar - outside regular trading hours (9:30 AM - 4:00 PM ET)
+      return; // Skip this bar - outside regular trading hours (9:30 AM - 4:00
+              // PM ET)
   }
 
   history.add_bar(bar.close, bar.high, bar.low, bar.volume);
@@ -292,7 +294,8 @@ void process_bar(
           not configs.at(signal.strategy_name).enabled)
         continue;
 
-      // Apply low-volume confidence filter (reduce confidence in low-volume conditions)
+      // Apply low-volume confidence filter (reduce confidence in low-volume
+      // conditions)
       signal.confidence /= history.volume_factor();
 
       // Noise regime filtering: disable momentum strategies in high noise
@@ -1216,6 +1219,7 @@ void run_live_trading(
                   // Log cost-blocked trade (reuse blocked trades CSV)
                   auto vol_ratio =
                       lft::Strategies::calculate_volume_ratio(history);
+
                   log_blocked_trade(symbol, signal.strategy_name, signal.reason,
                                     spread_bps, max_spread, vol_ratio,
                                     min_volume_ratio, now);
@@ -1397,6 +1401,7 @@ void run_live_trading(
                 // default
                 auto expected_move_bps =
                     configs.at(signal.strategy_name).expected_move_bps;
+
                 if (expected_move_bps <= 0.0) {
                   expected_move_bps = signal.expected_move_bps > 0.0
                                           ? signal.expected_move_bps
@@ -1478,6 +1483,7 @@ void run_live_trading(
                               ? std::stod(order_json["filled_avg_price"]
                                               .get<std::string>())
                               : 0.0;
+
                       auto quantity_filled =
                           order_json.contains("filled_qty")
                               ? std::stod(
