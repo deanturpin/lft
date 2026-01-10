@@ -529,6 +529,21 @@ calibrate_all_strategies(lft::AlpacaClient &client,
   return configs;
 }
 
+// Validate bid/ask quote data
+constexpr bool has_valid_quotes(double bid, double ask) {
+  return bid > 0.0 and ask > 0.0 and ask >= bid;
+}
+
+// Calculate bid-ask spread percentage
+constexpr double calculate_spread_pct(double bid, double ask) {
+  if (not has_valid_quotes(bid, ask))
+    return 0.0;
+
+  auto spread_abs = ask - bid;
+  auto mid_price = (bid + ask) / 2.0;
+  return (spread_abs / mid_price) * 100.0;
+}
+
 void print_header() {
   std::println("\n{:<10} {:>12} {:>12} {:>12} {:>10} {:>8} {}", "SYMBOL",
                "LAST", "BID", "ASK", "CHANGE%", "SPREAD%", "STATUS");
@@ -546,19 +561,8 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
                                    snap.latest_trade_timestamp);
 
   // Calculate bid-ask spread for trading viability assessment
-  // Validate quote data before calculation
-  auto has_valid_quotes =
-      snap.latest_quote_bid > 0.0 and snap.latest_quote_ask > 0.0 and
-      snap.latest_quote_ask >= snap.latest_quote_bid;
-
-  auto spread_abs = 0.0;
-  auto spread_pct = 0.0;
-
-  if (has_valid_quotes) {
-    spread_abs = snap.latest_quote_ask - snap.latest_quote_bid;
-    auto mid_price = (snap.latest_quote_bid + snap.latest_quote_ask) / 2.0;
-    spread_pct = (spread_abs / mid_price) * 100.0;
-  }
+  auto valid_quotes = has_valid_quotes(snap.latest_quote_bid, snap.latest_quote_ask);
+  auto spread_pct = calculate_spread_pct(snap.latest_quote_bid, snap.latest_quote_ask);
 
   if (history.has_history) {
     if (history.change_percent > 0.0)
@@ -574,14 +578,14 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
   }
 
   // Flag invalid quote data
-  if (not has_valid_quotes)
+  if (not valid_quotes)
     status += status.empty() ? "⚠️ NO QUOTES" : " ⚠️Q";
 
   // Assess trading viability based on spread
   // Wide spreads indicate poor liquidity and higher transaction costs
-  if (has_valid_quotes and spread_pct > 2.0)
+  if (valid_quotes and spread_pct > 2.0)
     status += status.empty() ? "💸 WIDE SPREAD" : " 💸";
-  else if (has_valid_quotes and spread_pct > 1.0)
+  else if (valid_quotes and spread_pct > 1.0)
     status += status.empty() ? "⚠️ HIGH SPREAD" : " ⚠️$";
 
   std::println("{}{:<10} {:>12.2f} {:>12.2f} {:>12.2f} {:>9.2f}% {:>7.3f}% {}{}",
@@ -1248,13 +1252,8 @@ void run_live_trading(
 
                       // Calculate expected price (ask for buy orders) and spread
                       auto expected_price = snap.latest_quote_ask;
-                      auto spread_abs =
-                          snap.latest_quote_ask - snap.latest_quote_bid;
-                      auto mid_price =
-                          (snap.latest_quote_bid + snap.latest_quote_ask) / 2.0;
-                      auto spread_pct =
-                          mid_price > 0.0 ? (spread_abs / mid_price) * 100.0
-                                          : 0.0;
+                      auto spread_pct = calculate_spread_pct(
+                          snap.latest_quote_bid, snap.latest_quote_ask);
 
                       log_order_entry(symbol, signal.strategy_name, order_id,
                                       expected_price, filled_price, spread_pct,
@@ -1454,13 +1453,8 @@ void run_live_trading(
 
                       // Calculate expected price (ask for buy orders) and spread
                       auto expected_price = snap.latest_quote_ask;
-                      auto spread_abs =
-                          snap.latest_quote_ask - snap.latest_quote_bid;
-                      auto mid_price =
-                          (snap.latest_quote_bid + snap.latest_quote_ask) / 2.0;
-                      auto spread_pct =
-                          mid_price > 0.0 ? (spread_abs / mid_price) * 100.0
-                                          : 0.0;
+                      auto spread_pct = calculate_spread_pct(
+                          snap.latest_quote_bid, snap.latest_quote_ask);
 
                       log_order_entry(symbol, signal.strategy_name, order_id,
                                       expected_price, filled_price, spread_pct,
