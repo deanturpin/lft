@@ -1215,11 +1215,8 @@ int main() {
   auto configs = calibrate_all_strategies(client, stocks, crypto);
 
   // Check if any strategies are enabled
-  auto enabled_count = 0;
-  for (const auto &[name, config] : configs) {
-    if (config.enabled)
-      ++enabled_count;
-  }
+  auto enabled_count = std::ranges::count_if(
+      configs, [](const auto &p) { return p.second.enabled; });
 
   if (enabled_count == 0)
     std::println("{}⚠ No profitable strategies - will only manage exits{}\n",
