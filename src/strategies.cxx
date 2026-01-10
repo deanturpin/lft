@@ -69,15 +69,30 @@ double PriceHistory::volatility() const {
     if (prices.size() < 2)
         return 0.0;
 
-    auto mean = moving_average(prices.size());
-    auto variance = 0.0;
+    // Calculate returns (percentage changes between consecutive prices)
+    auto returns = std::vector<double>{};
+    returns.reserve(prices.size() - 1);
 
-    for (const auto& price : prices) {
-        auto diff = price - mean;
+    for (auto i = 1uz; i < prices.size(); ++i) {
+        auto ret = (prices[i] - prices[i-1]) / prices[i-1];
+        returns.push_back(ret);
+    }
+
+    // Calculate mean return
+    auto sum = 0.0;
+    for (const auto& ret : returns)
+        sum += ret;
+    auto mean_return = sum / returns.size();
+
+    // Calculate variance of returns
+    auto variance = 0.0;
+    for (const auto& ret : returns) {
+        auto diff = ret - mean_return;
         variance += diff * diff;
     }
 
-    return std::sqrt(variance / prices.size());
+    // Return standard deviation of returns (volatility)
+    return std::sqrt(variance / returns.size());
 }
 
 double PriceHistory::recent_noise(size_t periods) const {
