@@ -1,5 +1,7 @@
 #pragma once
 
+#include "bps_utils.h"
+
 // Compile-time tests for exit logic
 // These tests verify the fundamental P&L and exit calculations are correct
 
@@ -18,10 +20,33 @@ constexpr double operator""_pc(unsigned long long x) { return x / 100.0; }
 constexpr auto stock_spread = 2.0 / 10000.0;   // 2 basis points = 0.02%
 constexpr auto crypto_spread = 10.0 / 10000.0; // 10 basis points = 0.1%
 
+// Spread constants in bps for clarity
+constexpr auto stock_spread_bps = 2.0;   // 2 bps
+constexpr auto crypto_spread_bps = 10.0; // 10 bps
+
 // Exit parameters (from lft.cxx)
 constexpr auto take_profit_pct = 2_pc;
 constexpr auto stop_loss_pct = 2_pc;
 constexpr auto trailing_stop_pct = 1_pc;
+
+// Exit parameters in bps for comparison
+constexpr auto take_profit_bps = 200.0;   // 200 bps = 2%
+constexpr auto stop_loss_bps = 200.0;     // 200 bps = 2%
+constexpr auto trailing_stop_bps = 100.0; // 100 bps = 1%
+
+// Verify bps constants match percentage constants
+static_assert(near(lft::bps_to_percent(take_profit_bps), take_profit_pct),
+              "Take profit: 200 bps = 2%");
+static_assert(near(lft::bps_to_percent(stop_loss_bps), stop_loss_pct),
+              "Stop loss: 200 bps = 2%");
+static_assert(near(lft::bps_to_percent(trailing_stop_bps), trailing_stop_pct),
+              "Trailing stop: 100 bps = 1%");
+
+// Verify spread constants
+static_assert(near(lft::bps_to_percent(stock_spread_bps), stock_spread),
+              "Stock spread: 2 bps = 0.02%");
+static_assert(near(lft::bps_to_percent(crypto_spread_bps), crypto_spread),
+              "Crypto spread: 10 bps = 0.1%");
 
 // Noise and signal analysis
 // Minimum signal-to-noise ratio: signal must be at least 3x the noise
