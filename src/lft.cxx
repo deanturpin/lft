@@ -49,8 +49,10 @@ constexpr auto countdown_seconds = 10;
 // CSV file constants
 constexpr auto orders_csv_filename = "lft_orders.csv"sv;
 constexpr auto exits_csv_filename = "lft_exits.csv"sv;
+constexpr auto blocked_csv_filename = "lft_blocked_trades.csv"sv;
 constexpr auto orders_csv_header = "timestamp,symbol,strategy,order_id,expected_price,entry_price,slippage_abs,slippage_pct,spread_pct,quantity,notional,account_balance\n"sv;
 constexpr auto exits_csv_header = "timestamp,symbol,order_id,exit_price,exit_reason,peak_price,account_balance\n"sv;
+constexpr auto blocked_csv_header = "timestamp,symbol,strategy,signal_reason,spread_bps,max_spread_bps,volume_ratio,min_volume_ratio,block_reason\n"sv;
 
 // Position tracking for backtest
 struct Position {
@@ -739,6 +741,47 @@ void log_exit(std::string_view symbol, std::string_view order_id,
                exits_csv_filename.data(), colour_reset);
 }
 
+void log_blocked_trade(std::string_view symbol, std::string_view strategy,
+                       std::string_view signal_reason, double spread_bps,
+                       double max_spread_bps, double volume_ratio,
+                       double min_volume_ratio,
+                       const std::chrono::system_clock::time_point &block_time) {
+
+  // Check if file exists to determine if we need to write header
+  auto file_exists = std::ifstream{blocked_csv_filename.data()}.good();
+
+  auto file = std::ofstream{blocked_csv_filename.data(), std::ios::app};
+  if (not file.is_open()) {
+    std::println("{}⚠  Failed to write blocked trade log: {}{}", colour_yellow,
+                 blocked_csv_filename.data(), colour_reset);
+    return;
+  }
+
+  // Write header if new file
+  if (not file_exists)
+    file << blocked_csv_header;
+
+  // Determine block reason
+  auto block_reason = std::string{};
+  if (spread_bps > max_spread_bps and volume_ratio < min_volume_ratio)
+    block_reason = "spread+volume";
+  else if (spread_bps > max_spread_bps)
+    block_reason = "spread";
+  else if (volume_ratio < min_volume_ratio)
+    block_reason = "volume";
+  else
+    block_reason = "unknown";
+
+  // Write blocked trade data
+  file << std::format("{:%Y-%m-%d %H:%M:%S},{},{},{},{:.1f},{:.1f},{:.2f},{"
+                      ":.2f},{}\n",
+                      block_time, symbol, strategy, signal_reason, spread_bps,
+                      max_spread_bps, volume_ratio, min_volume_ratio,
+                      block_reason);
+
+  file.close();
+}
+
 // Live trading loop
 void run_live_trading(
     lft::AlpacaClient &client, const std::vector<std::string> &stocks,
@@ -970,6 +1013,12 @@ void run_live_trading(
                                min_volume_ratio);
                   std::println("   Signal: {} - {}", signal.strategy_name,
                                signal.reason);
+
+                  // Log blocked trade
+                  log_blocked_trade(symbol, signal.strategy_name,
+                                    signal.reason, spread_bps, max_spread,
+                                    vol_ratio, min_volume_ratio, now);
+
                   break; // Skip this trade and move to next symbol
                 }
 
@@ -1130,6 +1179,12 @@ void run_live_trading(
                                min_volume_ratio);
                   std::println("   Signal: {} - {}", signal.strategy_name,
                                signal.reason);
+
+                  // Log blocked trade
+                  log_blocked_trade(symbol, signal.strategy_name,
+                                    signal.reason, spread_bps, max_spread,
+                                    vol_ratio, min_volume_ratio, now);
+
                   break; // Skip this trade and move to next symbol
                 }
 
