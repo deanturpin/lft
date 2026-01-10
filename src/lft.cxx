@@ -242,10 +242,8 @@ void process_bar(
           not configs.at(signal.strategy_name).enabled)
         continue;
 
-      // Apply low-volume confidence filter
-      auto vol_factor = history.volume_factor();
-      signal.confidence /=
-          vol_factor; // Reduce confidence in low-volume conditions
+      // Apply low-volume confidence filter (reduce confidence in low-volume conditions)
+      signal.confidence /= history.volume_factor();
 
       // Noise regime filtering: disable momentum strategies in high noise
       if (high_noise_regime and
