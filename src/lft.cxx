@@ -1517,7 +1517,7 @@ void run_live_trading(
 
     std::println("\n⏳ Next update at {:%H:%M:%S} | {} cycles remaining\n",
                  next_update, cycles_remaining);
-    std::this_thread::sleep_for(sleep_duration);
+    std::this_thread::sleep_until(next_update);
   }
 }
 
