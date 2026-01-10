@@ -39,26 +39,31 @@ constexpr auto colour_yellow = "\033[33m";
 
 // Trading constants
 constexpr auto starting_capital = 100000.0;
-constexpr auto low_noise_threshold = 0.005;   // 0.5% noise
-constexpr auto high_noise_threshold = 0.015;  // 1.5% noise
-constexpr auto dst_start_month = 2;           // March (0-indexed)
-constexpr auto dst_end_month = 9;             // October (0-indexed)
-constexpr auto et_offset_dst = -4h;           // EDT (daylight saving)
-constexpr auto et_offset_std = -5h;           // EST (standard time)
+constexpr auto low_noise_threshold = 0.005;  // 0.5% noise
+constexpr auto high_noise_threshold = 0.015; // 1.5% noise
+constexpr auto dst_start_month = 2;          // March (0-indexed)
+constexpr auto dst_end_month = 9;            // October (0-indexed)
+constexpr auto et_offset_dst = -4h;          // EDT (daylight saving)
+constexpr auto et_offset_std = -5h;          // EST (standard time)
 constexpr auto countdown_seconds = 10;
 
 // CSV file constants
 constexpr auto orders_csv_filename = "lft_orders.csv"sv;
 constexpr auto exits_csv_filename = "lft_exits.csv"sv;
 constexpr auto blocked_csv_filename = "lft_blocked_trades.csv"sv;
-constexpr auto orders_csv_header = "timestamp,symbol,strategy,order_id,expected_price,entry_price,slippage_abs,slippage_pct,spread_pct,quantity,notional,account_balance\n"sv;
-constexpr auto exits_csv_header = "timestamp,symbol,order_id,exit_price,exit_reason,peak_price,account_balance\n"sv;
-constexpr auto blocked_csv_header = "timestamp,symbol,strategy,signal_reason,spread_bps,max_spread_bps,volume_ratio,min_volume_ratio,block_reason\n"sv;
+constexpr auto orders_csv_header =
+    "timestamp,symbol,strategy,order_id,expected_price,entry_price,slippage_abs,slippage_pct,spread_pct,quantity,notional,account_balance\n"sv;
+constexpr auto exits_csv_header =
+    "timestamp,symbol,order_id,exit_price,exit_reason,peak_price,account_balance\n"sv;
+constexpr auto blocked_csv_header =
+    "timestamp,symbol,strategy,signal_reason,spread_bps,max_spread_bps,volume_ratio,min_volume_ratio,block_reason\n"sv;
 
 // Compile-time validation of trading constants
 static_assert(starting_capital > 0.0, "Starting capital must be positive");
-static_assert(starting_capital >= 1000.0, "Starting capital too low - min $1000");
-static_assert(low_noise_threshold > 0.0, "Low noise threshold must be positive");
+static_assert(starting_capital >= 1000.0,
+              "Starting capital too low - min $1000");
+static_assert(low_noise_threshold > 0.0,
+              "Low noise threshold must be positive");
 static_assert(high_noise_threshold > low_noise_threshold,
               "High noise threshold must be higher than low noise threshold");
 static_assert(high_noise_threshold < 1.0,
@@ -125,8 +130,8 @@ sleep_until_bar_ready(const std::chrono::system_clock::time_point &now) {
   auto current_second = now_tm.tm_sec;
 
   // If we're before :35, target is :35 this minute, otherwise :35 next minute
-  auto seconds_to_wait = current_second < 35 ? 35 - current_second
-                                              : 60 - current_second + 35;
+  auto seconds_to_wait =
+      current_second < 35 ? 35 - current_second : 60 - current_second + 35;
 
   return seconds{seconds_to_wait};
 }
@@ -136,12 +141,23 @@ constexpr bool is_crypto(std::string_view symbol) {
   return symbol.find('/') != std::string_view::npos;
 }
 
-void process_bar(const std::string &symbol, const lft::Bar &bar,
-                 std::size_t bar_index, lft::PriceHistory &history,
-                 const std::map<std::string, lft::PriceHistory> &all_histories,
-                 BacktestStats &stats,
-                 const std::map<std::string, lft::StrategyConfig> &configs,
-                 const std::map<std::string, std::vector<lft::Bar>> &symbol_bars) {
+// Get appropriate spread for asset type (from exit_logic_tests.h)
+constexpr double get_spread(bool crypto) {
+  return crypto ? crypto_spread : stock_spread;
+}
+
+// Get appropriate max spread threshold for asset type (from defs.h)
+constexpr double get_max_spread_bps(bool crypto) {
+  return crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
+}
+
+void process_bar(
+    const std::string &symbol, const lft::Bar &bar, std::size_t bar_index,
+    lft::PriceHistory &history,
+    const std::map<std::string, lft::PriceHistory> &all_histories,
+    BacktestStats &stats,
+    const std::map<std::string, lft::StrategyConfig> &configs,
+    const std::map<std::string, std::vector<lft::Bar>> &symbol_bars) {
 
   // Filter out extended hours for stocks (keep crypto 24/7)
   auto crypto = is_crypto(symbol);
@@ -164,7 +180,7 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
 
     // Apply spread: sell at bid (mid - half spread)
     auto crypto = is_crypto(symbol);
-    auto spread = crypto ? crypto_spread : stock_spread;
+    auto spread = get_spread(crypto);
     auto half_spread = bar.close * (spread / 2.0);
     auto sell_price = bar.close - half_spread;
 
@@ -181,7 +197,7 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
     auto trailing_stop_price = pos.peak_price * (1.0 - trailing_stop_pct);
     auto trailing_stop_triggered = sell_price < trailing_stop_price;
 
-    auto should_exit = pl_pct >= take_profit_pct or pl_pct <= -stop_loss_pct or
+    auto should_exit = pl_pct >= take_profit_pct || pl_pct <= -stop_loss_pct ||
                        trailing_stop_triggered;
 
     if (should_exit) {
@@ -259,14 +275,20 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
 
             assert(current_price > 0.0 && "Current price must be positive");
             assert(future_price > 0.0 && "Future price must be positive");
-            assert(std::isfinite(current_price) && "Current price must be finite");
-            assert(std::isfinite(future_price) && "Future price must be finite");
+            assert(std::isfinite(current_price) &&
+                   "Current price must be finite");
+            assert(std::isfinite(future_price) &&
+                   "Future price must be finite");
 
-            auto forward_return_pct = (future_price - current_price) / current_price;
-            auto forward_return_bps = forward_return_pct * 10000.0; // Convert to bps
+            auto forward_return_pct =
+                (future_price - current_price) / current_price;
+            auto forward_return_bps =
+                forward_return_pct * 10000.0; // Convert to bps
 
-            assert(std::isfinite(forward_return_bps) && "Forward return must be finite");
-            assert(std::abs(forward_return_bps) < 10000.0 && "Forward return unreasonably large (>10000 bps = 100%)");
+            assert(std::isfinite(forward_return_bps) &&
+                   "Forward return must be finite");
+            assert(std::abs(forward_return_bps) < 10000.0 &&
+                   "Forward return unreasonably large (>10000 bps = 100%)");
 
             // Track forward returns
             auto &strat_stats = stats.strategy_stats[signal.strategy_name];
@@ -285,7 +307,7 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
 
           // Apply spread: buy at ask (mid + half spread)
           auto crypto = is_crypto(symbol);
-          auto spread = crypto ? crypto_spread : stock_spread;
+          auto spread = get_spread(crypto);
           auto half_spread = bar.close * (spread / 2.0);
           auto buy_price = bar.close + half_spread;
 
@@ -361,7 +383,7 @@ BacktestStats run_backtest_with_data(
 
     // Apply spread when closing final positions
     auto crypto = is_crypto(symbol);
-    auto spread = crypto ? crypto_spread : stock_spread;
+    auto spread = get_spread(crypto);
     auto final_mid = bars.back().close;
     auto half_spread = final_mid * (spread / 2.0);
     auto final_sell_price = final_mid - half_spread;
@@ -414,7 +436,8 @@ lft::StrategyConfig calibrate_strategy(
   auto trades = stats.strategy_stats[strategy_name].trades_closed;
   auto signals = stats.strategy_stats[strategy_name].signals_generated;
   auto win_rate = stats.strategy_stats[strategy_name].win_rate();
-  auto expected_move = stats.strategy_stats[strategy_name].avg_forward_return_bps();
+  auto expected_move =
+      stats.strategy_stats[strategy_name].avg_forward_return_bps();
 
   auto config = configs[strategy_name];
   config.trades_closed = trades;
@@ -566,8 +589,10 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
                                    snap.latest_trade_timestamp);
 
   // Calculate bid-ask spread for trading viability assessment
-  auto valid_quotes = has_valid_quotes(snap.latest_quote_bid, snap.latest_quote_ask);
-  auto spread_pct = calculate_spread_pct(snap.latest_quote_bid, snap.latest_quote_ask);
+  auto valid_quotes =
+      has_valid_quotes(snap.latest_quote_bid, snap.latest_quote_ask);
+  auto spread_pct =
+      calculate_spread_pct(snap.latest_quote_bid, snap.latest_quote_ask);
 
   if (history.has_history) {
     if (history.change_percent > 0.0)
@@ -593,10 +618,11 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
   else if (valid_quotes and spread_pct > 1.0)
     status += status.empty() ? "⚠️ HIGH SPREAD" : " ⚠️$";
 
-  std::println("{}{:<10} {:>12.2f} {:>12.2f} {:>12.2f} {:>9.2f}% {:>7.3f}% {}{}",
-               colour, symbol, snap.latest_trade_price, snap.latest_quote_bid,
-               snap.latest_quote_ask, history.change_percent, spread_pct,
-               status, colour_reset);
+  std::println(
+      "{}{:<10} {:>12.2f} {:>12.2f} {:>12.2f} {:>9.2f}% {:>7.3f}% {}{}", colour,
+      symbol, snap.latest_trade_price, snap.latest_quote_bid,
+      snap.latest_quote_ask, history.change_percent, spread_pct, status,
+      colour_reset);
 }
 
 // Calculate total estimated costs for a trade in basis points
@@ -614,10 +640,12 @@ constexpr double calculate_total_cost_bps(double spread_bps) {
 }
 
 // Check if trade has positive edge after costs
-constexpr bool has_positive_edge(double expected_move_bps, double total_cost_bps) {
+constexpr bool has_positive_edge(double expected_move_bps,
+                                 double total_cost_bps) {
   assert(expected_move_bps >= 0.0 && "Expected move cannot be negative");
   assert(total_cost_bps > 0.0 && "Total cost must be positive");
-  assert(expected_move_bps < 10000.0 && "Expected move unreasonably high (>10000 bps)");
+  assert(expected_move_bps < 10000.0 &&
+         "Expected move unreasonably high (>10000 bps)");
 
   auto net_edge_bps = expected_move_bps - total_cost_bps;
   return net_edge_bps >= min_edge_bps;
@@ -628,20 +656,23 @@ namespace {
 // Test: Total cost includes all components
 constexpr auto test_spread = 10.0;
 constexpr auto test_total_cost = calculate_total_cost_bps(test_spread);
-static_assert(test_total_cost == test_spread + slippage_buffer_bps + adverse_selection_bps,
+static_assert(test_total_cost ==
+                  test_spread + slippage_buffer_bps + adverse_selection_bps,
               "Total cost should equal spread + slippage + adverse selection");
 
 // Test: Edge calculation with profitable trade
 constexpr auto test_expected_move = 50.0; // 50 bps expected
 constexpr auto test_costs = 15.0;         // 15 bps costs
-static_assert(has_positive_edge(test_expected_move, test_costs),
-              "50 bps move - 15 bps costs = 35 bps edge, should pass (min 10 bps)");
+static_assert(
+    has_positive_edge(test_expected_move, test_costs),
+    "50 bps move - 15 bps costs = 35 bps edge, should pass (min 10 bps)");
 
 // Test: Edge calculation with marginal trade
 constexpr auto marginal_move = 20.0;  // 20 bps expected
 constexpr auto marginal_costs = 15.0; // 15 bps costs
-static_assert(not has_positive_edge(marginal_move, marginal_costs),
-              "20 bps move - 15 bps costs = 5 bps edge, should fail (min 10 bps)");
+static_assert(
+    not has_positive_edge(marginal_move, marginal_costs),
+    "20 bps move - 15 bps costs = 5 bps edge, should fail (min 10 bps)");
 
 // Test: Edge calculation with negative edge
 static_assert(not has_positive_edge(10.0, 20.0),
@@ -848,9 +879,8 @@ void log_order_entry(std::string_view symbol, std::string_view strategy,
 
   // Log slippage info to console
   auto slippage_colour = slippage_abs > 0.0 ? colour_red : colour_green;
-  std::println("{}📝 Order logged: slippage {}{:.4f} ({:.3f}%){}",
-               colour_green, slippage_colour, slippage_abs, slippage_pct,
-               colour_reset);
+  std::println("{}📝 Order logged: slippage {}{:.4f} ({:.3f}%){}", colour_green,
+               slippage_colour, slippage_abs, slippage_pct, colour_reset);
 }
 
 void log_exit(std::string_view symbol, std::string_view order_id,
@@ -883,11 +913,11 @@ void log_exit(std::string_view symbol, std::string_view order_id,
                exits_csv_filename.data(), colour_reset);
 }
 
-void log_blocked_trade(std::string_view symbol, std::string_view strategy,
-                       std::string_view signal_reason, double spread_bps,
-                       double max_spread_bps, double volume_ratio,
-                       double min_volume_ratio,
-                       const std::chrono::system_clock::time_point &block_time) {
+void log_blocked_trade(
+    std::string_view symbol, std::string_view strategy,
+    std::string_view signal_reason, double spread_bps, double max_spread_bps,
+    double volume_ratio, double min_volume_ratio,
+    const std::chrono::system_clock::time_point &block_time) {
 
   // Check if file exists to determine if we need to write header
   auto file_exists = std::ifstream{blocked_csv_filename.data()}.good();
@@ -1138,8 +1168,7 @@ void run_live_trading(
 
                 // Check trade eligibility (spread and volume filters)
                 auto crypto = is_crypto(symbol);
-                auto max_spread =
-                    crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
+                auto max_spread = get_max_spread_bps(crypto);
 
                 if (not lft::Strategies::is_tradeable(snap, history, max_spread,
                                                       min_volume_ratio)) {
@@ -1157,9 +1186,9 @@ void run_live_trading(
                                signal.reason);
 
                   // Log blocked trade
-                  log_blocked_trade(symbol, signal.strategy_name,
-                                    signal.reason, spread_bps, max_spread,
-                                    vol_ratio, min_volume_ratio, now);
+                  log_blocked_trade(symbol, signal.strategy_name, signal.reason,
+                                    spread_bps, max_spread, vol_ratio,
+                                    min_volume_ratio, now);
 
                   break; // Skip this trade and move to next symbol
                 }
@@ -1168,8 +1197,10 @@ void run_live_trading(
                 auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
                 auto total_cost_bps = calculate_total_cost_bps(spread_bps);
 
-                // Use expected move from config (calibrated), or signal, or default
-                auto expected_move_bps = configs.at(signal.strategy_name).expected_move_bps;
+                // Use expected move from config (calibrated), or signal, or
+                // default
+                auto expected_move_bps =
+                    configs.at(signal.strategy_name).expected_move_bps;
                 if (expected_move_bps <= 0.0) {
                   expected_move_bps = signal.expected_move_bps > 0.0
                                           ? signal.expected_move_bps
@@ -1178,34 +1209,36 @@ void run_live_trading(
 
                 if (not has_positive_edge(expected_move_bps, total_cost_bps)) {
                   auto net_edge_bps = expected_move_bps - total_cost_bps;
-                  std::println("{}💸 TRADE BLOCKED: Insufficient edge{}", colour_yellow,
-                               colour_reset);
+                  std::println("{}💸 TRADE BLOCKED: Insufficient edge{}",
+                               colour_yellow, colour_reset);
                   std::println(
                       "   Expected move: {:.1f} bps, Total cost: {:.1f} bps "
                       "(spread {:.1f} + slippage {:.1f} + adverse {:.1f})",
                       expected_move_bps, total_cost_bps, spread_bps,
                       slippage_buffer_bps, adverse_selection_bps);
-                  std::println("   Net edge: {:.1f} bps (min required: {:.1f} bps)",
-                               net_edge_bps, min_edge_bps);
+                  std::println(
+                      "   Net edge: {:.1f} bps (min required: {:.1f} bps)",
+                      net_edge_bps, min_edge_bps);
                   std::println("   Signal: {} - {}", signal.strategy_name,
                                signal.reason);
 
                   // Log cost-blocked trade (reuse blocked trades CSV)
                   auto vol_ratio =
                       lft::Strategies::calculate_volume_ratio(history);
-                  log_blocked_trade(symbol, signal.strategy_name,
-                                    signal.reason, spread_bps, max_spread,
-                                    vol_ratio, min_volume_ratio, now);
+                  log_blocked_trade(symbol, signal.strategy_name, signal.reason,
+                                    spread_bps, max_spread, vol_ratio,
+                                    min_volume_ratio, now);
 
                   break; // Skip this trade and move to next symbol
                 }
 
                 std::println("{}🚨 SIGNAL: {} - {}{}", colour_cyan,
                              signal.strategy_name, signal.reason, colour_reset);
-                std::println("   Expected move: {:.1f} bps, Cost: {:.1f} bps, Net "
-                             "edge: {:.1f} bps",
-                             expected_move_bps, total_cost_bps,
-                             expected_move_bps - total_cost_bps);
+                std::println(
+                    "   Expected move: {:.1f} bps, Cost: {:.1f} bps, Net "
+                    "edge: {:.1f} bps",
+                    expected_move_bps, total_cost_bps,
+                    expected_move_bps - total_cost_bps);
                 std::println("   Buying ${:.0f} of {}...", notional_amount,
                              symbol);
 
@@ -1255,7 +1288,8 @@ void run_live_trading(
                                     order_json["filled_qty"].get<std::string>())
                               : notional_amount / filled_price;
 
-                      // Calculate expected price (ask for buy orders) and spread
+                      // Calculate expected price (ask for buy orders) and
+                      // spread
                       auto expected_price = snap.latest_quote_ask;
                       auto spread_pct = calculate_spread_pct(
                           snap.latest_quote_bid, snap.latest_quote_ask);
@@ -1339,8 +1373,7 @@ void run_live_trading(
 
                 // Check trade eligibility (spread and volume filters)
                 auto crypto = is_crypto(symbol);
-                auto max_spread =
-                    crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
+                auto max_spread = get_max_spread_bps(crypto);
 
                 if (not lft::Strategies::is_tradeable(snap, history, max_spread,
                                                       min_volume_ratio)) {
@@ -1358,9 +1391,9 @@ void run_live_trading(
                                signal.reason);
 
                   // Log blocked trade
-                  log_blocked_trade(symbol, signal.strategy_name,
-                                    signal.reason, spread_bps, max_spread,
-                                    vol_ratio, min_volume_ratio, now);
+                  log_blocked_trade(symbol, signal.strategy_name, signal.reason,
+                                    spread_bps, max_spread, vol_ratio,
+                                    min_volume_ratio, now);
 
                   break; // Skip this trade and move to next symbol
                 }
@@ -1369,8 +1402,10 @@ void run_live_trading(
                 auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
                 auto total_cost_bps = calculate_total_cost_bps(spread_bps);
 
-                // Use expected move from config (calibrated), or signal, or default
-                auto expected_move_bps = configs.at(signal.strategy_name).expected_move_bps;
+                // Use expected move from config (calibrated), or signal, or
+                // default
+                auto expected_move_bps =
+                    configs.at(signal.strategy_name).expected_move_bps;
                 if (expected_move_bps <= 0.0) {
                   expected_move_bps = signal.expected_move_bps > 0.0
                                           ? signal.expected_move_bps
@@ -1379,34 +1414,36 @@ void run_live_trading(
 
                 if (not has_positive_edge(expected_move_bps, total_cost_bps)) {
                   auto net_edge_bps = expected_move_bps - total_cost_bps;
-                  std::println("{}💸 TRADE BLOCKED: Insufficient edge{}", colour_yellow,
-                               colour_reset);
+                  std::println("{}💸 TRADE BLOCKED: Insufficient edge{}",
+                               colour_yellow, colour_reset);
                   std::println(
                       "   Expected move: {:.1f} bps, Total cost: {:.1f} bps "
                       "(spread {:.1f} + slippage {:.1f} + adverse {:.1f})",
                       expected_move_bps, total_cost_bps, spread_bps,
                       slippage_buffer_bps, adverse_selection_bps);
-                  std::println("   Net edge: {:.1f} bps (min required: {:.1f} bps)",
-                               net_edge_bps, min_edge_bps);
+                  std::println(
+                      "   Net edge: {:.1f} bps (min required: {:.1f} bps)",
+                      net_edge_bps, min_edge_bps);
                   std::println("   Signal: {} - {}", signal.strategy_name,
                                signal.reason);
 
                   // Log cost-blocked trade (reuse blocked trades CSV)
                   auto vol_ratio =
                       lft::Strategies::calculate_volume_ratio(history);
-                  log_blocked_trade(symbol, signal.strategy_name,
-                                    signal.reason, spread_bps, max_spread,
-                                    vol_ratio, min_volume_ratio, now);
+                  log_blocked_trade(symbol, signal.strategy_name, signal.reason,
+                                    spread_bps, max_spread, vol_ratio,
+                                    min_volume_ratio, now);
 
                   break; // Skip this trade and move to next symbol
                 }
 
                 std::println("{}🚨 SIGNAL: {} - {}{}", colour_cyan,
                              signal.strategy_name, signal.reason, colour_reset);
-                std::println("   Expected move: {:.1f} bps, Cost: {:.1f} bps, Net "
-                             "edge: {:.1f} bps",
-                             expected_move_bps, total_cost_bps,
-                             expected_move_bps - total_cost_bps);
+                std::println(
+                    "   Expected move: {:.1f} bps, Cost: {:.1f} bps, Net "
+                    "edge: {:.1f} bps",
+                    expected_move_bps, total_cost_bps,
+                    expected_move_bps - total_cost_bps);
                 std::println("   Buying ${:.0f} of {}...", notional_amount,
                              symbol);
 
@@ -1456,7 +1493,8 @@ void run_live_trading(
                                     order_json["filled_qty"].get<std::string>())
                               : notional_amount / filled_price;
 
-                      // Calculate expected price (ask for buy orders) and spread
+                      // Calculate expected price (ask for buy orders) and
+                      // spread
                       auto expected_price = snap.latest_quote_ask;
                       auto spread_pct = calculate_spread_pct(
                           snap.latest_quote_bid, snap.latest_quote_ask);
@@ -1536,7 +1574,8 @@ int main() {
   auto configs = calibrate_all_strategies(client, stocks, crypto);
 
   // Check if any strategies are enabled
-  if (std::ranges::none_of(configs, [](const auto &p) { return p.second.enabled; }))
+  if (std::ranges::none_of(configs,
+                           [](const auto &p) { return p.second.enabled; }))
     std::println("{}⚠ No profitable strategies - will only manage exits{}\n",
                  colour_yellow, colour_reset);
 
