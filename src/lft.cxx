@@ -77,6 +77,58 @@ static_assert(dst_end_month > dst_start_month,
 static_assert(countdown_seconds > 0 and countdown_seconds <= 60,
               "Countdown should be 1-60 seconds");
 
+// Market status information
+struct MarketStatus {
+  bool is_open{};
+  std::string message;
+};
+
+// Check if US stock market is open and time until open/close
+MarketStatus get_market_status(const std::chrono::system_clock::time_point &now) {
+  using namespace std::chrono;
+
+  // Convert to time_t to get weekday
+  auto now_t = system_clock::to_time_t(now);
+  auto utc_time = std::gmtime(&now_t);
+  auto weekday = utc_time->tm_wday;
+
+  // Market closed on weekends
+  if (weekday == 0 or weekday == 6)
+    return {false, "Market CLOSED (weekend)"};
+
+  // US Eastern Time offset (simplified DST: EST=UTC-5, EDT=UTC-4)
+  auto month = utc_time->tm_mon;
+  auto is_dst = (month >= dst_start_month and month <= dst_end_month);
+  auto et_offset = is_dst ? et_offset_dst : et_offset_std;
+
+  // Get current time in ET
+  auto et_now = now + et_offset;
+  auto et_time_t = system_clock::to_time_t(et_now);
+  auto et_tm = std::gmtime(&et_time_t);
+
+  auto current_time = hours{et_tm->tm_hour} + minutes{et_tm->tm_min};
+  constexpr auto market_open = 9h + 30min; // 9:30 AM ET
+  constexpr auto market_close = 16h;       // 4:00 PM ET
+
+  if (current_time >= market_open and current_time < market_close) {
+    auto time_until_close = market_close - current_time;
+    auto h = duration_cast<hours>(time_until_close).count();
+    auto m = duration_cast<minutes>(time_until_close % 1h).count();
+    return {true, std::format("Market OPEN - {}h {}m until close", h, m)};
+  } else if (current_time < market_open) {
+    auto time_until_open = market_open - current_time;
+    auto h = duration_cast<hours>(time_until_open).count();
+    auto m = duration_cast<minutes>(time_until_open % 1h).count();
+    return {false, std::format("Market CLOSED - {}h {}m until open", h, m)};
+  } else {
+    // After close - time until tomorrow's open
+    auto time_until_tomorrow = (24h - current_time) + market_open;
+    auto h = duration_cast<hours>(time_until_tomorrow).count();
+    auto m = duration_cast<minutes>(time_until_tomorrow % 1h).count();
+    return {false, std::format("Market CLOSED - {}h {}m until open", h, m)};
+  }
+}
+
 // Position tracking for backtest
 struct Position {
   std::string symbol;
@@ -107,13 +159,6 @@ parse_bar_timestamp(const std::string &timestamp) {
   ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S");
   return std::chrono::system_clock::from_time_t(std::mktime(&tm));
 }
-
-// Forward declare get_market_status (defined later)
-struct MarketStatus {
-  bool is_open{};
-  std::string message;
-};
-MarketStatus get_market_status(const std::chrono::system_clock::time_point &);
 
 // Calculate sleep duration to align to 35 seconds past the next minute
 // Alpaca recalculates bars at :30 past each minute to include late trades
@@ -710,53 +755,6 @@ constexpr auto boundary_costs = 5.0;
 static_assert(has_positive_edge(boundary_move, boundary_costs),
               "Exactly min_edge_bps net should pass");
 } // namespace
-
-// Check if US stock market is open and time until open/close
-MarketStatus
-get_market_status(const std::chrono::system_clock::time_point &now) {
-  using namespace std::chrono;
-
-  // Convert to time_t to get weekday
-  auto now_t = system_clock::to_time_t(now);
-  auto utc_time = std::gmtime(&now_t);
-  auto weekday = utc_time->tm_wday;
-
-  // Market closed on weekends
-  if (weekday == 0 or weekday == 6)
-    return {false, "Market CLOSED (weekend)"};
-
-  // US Eastern Time offset (simplified DST: EST=UTC-5, EDT=UTC-4)
-  auto month = utc_time->tm_mon;
-  auto is_dst = (month >= dst_start_month and month <= dst_end_month);
-  auto et_offset = is_dst ? et_offset_dst : et_offset_std;
-
-  // Get current time in ET
-  auto et_now = now + et_offset;
-  auto et_time_t = system_clock::to_time_t(et_now);
-  auto et_tm = std::gmtime(&et_time_t);
-
-  auto current_time = hours{et_tm->tm_hour} + minutes{et_tm->tm_min};
-  constexpr auto market_open = 9h + 30min; // 9:30 AM ET
-  constexpr auto market_close = 16h;       // 4:00 PM ET
-
-  if (current_time >= market_open and current_time < market_close) {
-    auto time_until_close = market_close - current_time;
-    auto h = duration_cast<hours>(time_until_close).count();
-    auto m = duration_cast<minutes>(time_until_close % 1h).count();
-    return {true, std::format("Market OPEN - {}h {}m until close", h, m)};
-  } else if (current_time < market_open) {
-    auto time_until_open = market_open - current_time;
-    auto h = duration_cast<hours>(time_until_open).count();
-    auto m = duration_cast<minutes>(time_until_open % 1h).count();
-    return {false, std::format("Market CLOSED - {}h {}m until open", h, m)};
-  } else {
-    // After close - time until tomorrow's open
-    auto time_until_tomorrow = (24h - current_time) + market_open;
-    auto h = duration_cast<hours>(time_until_tomorrow).count();
-    auto m = duration_cast<minutes>(time_until_tomorrow % 1h).count();
-    return {false, std::format("Market CLOSED - {}h {}m until open", h, m)};
-  }
-}
 
 void print_account_stats(lft::AlpacaClient &client,
                          const std::chrono::system_clock::time_point &now) {
