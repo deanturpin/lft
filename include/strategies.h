@@ -1,6 +1,7 @@
 #pragma once
 
 #include "alpaca_client.h"
+#include "bps_utils.h"
 #include <cmath>
 #include <map>
 #include <string>
@@ -87,6 +88,11 @@ public:
 
     // Buy on volume surge with momentum
     static StrategySignal evaluate_volume_surge(const PriceHistory&);
+
+    // Trade eligibility checks
+    static double calculate_spread_bps(const Snapshot&);
+    static double calculate_volume_ratio(const PriceHistory&);
+    static bool is_tradeable(const Snapshot&, const PriceHistory&, double, double);
 };
 
 } // namespace lft

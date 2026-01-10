@@ -7,6 +7,11 @@ constexpr auto notional_amount = 1000.0;      // Dollar amount per trade
 constexpr auto calibration_days = 30;         // Duration for strategy calibration
 constexpr auto min_trades_to_enable = 10;     // Minimum trades to enable strategy
 
+// Trade eligibility filters (Tier 1 - Must Do)
+constexpr auto max_spread_bps_stocks = 25.0;  // Max 25 bps (0.25%) spread for stocks
+constexpr auto max_spread_bps_crypto = 50.0;  // Max 50 bps (0.50%) spread for crypto
+constexpr auto min_volume_ratio = 0.5;        // Min 50% of 20-period average volume
+
 // Asset watchlists
 #include <string>
 #include <vector>
@@ -134,5 +139,16 @@ static_assert(outlier_threshold > crypto_alert_threshold,
               "Outlier threshold must be higher than alert threshold");
 static_assert(outlier_threshold <= 100.0,
               "Outlier threshold too high - max 100%");
+
+// Trade eligibility filter checks
+static_assert(max_spread_bps_stocks > 0.0, "Stock spread filter must be positive");
+static_assert(max_spread_bps_crypto > 0.0, "Crypto spread filter must be positive");
+static_assert(max_spread_bps_stocks >= 5.0, "Stock spread filter too tight - min 5 bps");
+static_assert(max_spread_bps_stocks <= 100.0, "Stock spread filter too loose - max 100 bps");
+static_assert(max_spread_bps_crypto >= max_spread_bps_stocks,
+              "Crypto spread filter should be >= stocks (less liquid)");
+static_assert(max_spread_bps_crypto <= 200.0, "Crypto spread filter too loose - max 200 bps");
+static_assert(min_volume_ratio > 0.0, "Volume ratio filter must be positive");
+static_assert(min_volume_ratio <= 1.0, "Volume ratio filter cannot exceed 100%");
 
 } // namespace lft

@@ -896,6 +896,21 @@ void run_live_trading(
                   configs.contains(signal.strategy_name) and
                   configs.at(signal.strategy_name).enabled) {
 
+                // Check trade eligibility (spread and volume filters)
+                auto is_crypto = symbol.find('/') != std::string::npos;
+                auto max_spread = is_crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
+
+                if (not lft::Strategies::is_tradeable(snap, history, max_spread, min_volume_ratio)) {
+                  auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
+                  auto vol_ratio = lft::Strategies::calculate_volume_ratio(history);
+
+                  std::println("{}⛔ TRADE BLOCKED: {}{}", colour_yellow, symbol, colour_reset);
+                  std::println("   Spread: {:.1f} bps (max {:.1f}), Volume: {:.1f}x avg (min {:.1f}x)",
+                               spread_bps, max_spread, vol_ratio, min_volume_ratio);
+                  std::println("   Signal: {} - {}", signal.strategy_name, signal.reason);
+                  break;  // Skip this trade and move to next symbol
+                }
+
                 std::println("{}🚨 SIGNAL: {} - {}{}", colour_cyan,
                              signal.strategy_name, signal.reason, colour_reset);
                 std::println("   Buying ${:.0f} of {}...", notional_amount,
@@ -1021,6 +1036,21 @@ void run_live_trading(
               if (signal.should_buy and
                   configs.contains(signal.strategy_name) and
                   configs.at(signal.strategy_name).enabled) {
+
+                // Check trade eligibility (spread and volume filters)
+                auto is_crypto = symbol.find('/') != std::string::npos;
+                auto max_spread = is_crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
+
+                if (not lft::Strategies::is_tradeable(snap, history, max_spread, min_volume_ratio)) {
+                  auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
+                  auto vol_ratio = lft::Strategies::calculate_volume_ratio(history);
+
+                  std::println("{}⛔ TRADE BLOCKED: {}{}", colour_yellow, symbol, colour_reset);
+                  std::println("   Spread: {:.1f} bps (max {:.1f}), Volume: {:.1f}x avg (min {:.1f}x)",
+                               spread_bps, max_spread, vol_ratio, min_volume_ratio);
+                  std::println("   Signal: {} - {}", signal.strategy_name, signal.reason);
+                  break;  // Skip this trade and move to next symbol
+                }
 
                 std::println("{}🚨 SIGNAL: {} - {}{}", colour_cyan,
                              signal.strategy_name, signal.reason, colour_reset);

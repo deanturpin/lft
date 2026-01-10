@@ -7,11 +7,6 @@
 
 namespace {
 
-// Constexpr tolerance helper for floating-point comparisons
-constexpr bool near(double a, double b, double eps = 1e-12) {
-  return (a > b ? a - b : b - a) <= eps;
-}
-
 // User-defined literal for percentages
 constexpr double operator""_pc(long double x) { return x / 100.0; }
 constexpr double operator""_pc(unsigned long long x) { return x / 100.0; }
@@ -35,17 +30,17 @@ constexpr auto stop_loss_bps = 200.0;     // 200 bps = 2%
 constexpr auto trailing_stop_bps = 100.0; // 100 bps = 1%
 
 // Verify bps constants match percentage constants
-static_assert(near(lft::bps_to_percent(take_profit_bps), take_profit_pct),
+static_assert(lft::near(lft::bps_to_percent(take_profit_bps), take_profit_pct),
               "Take profit: 200 bps = 2%");
-static_assert(near(lft::bps_to_percent(stop_loss_bps), stop_loss_pct),
+static_assert(lft::near(lft::bps_to_percent(stop_loss_bps), stop_loss_pct),
               "Stop loss: 200 bps = 2%");
-static_assert(near(lft::bps_to_percent(trailing_stop_bps), trailing_stop_pct),
+static_assert(lft::near(lft::bps_to_percent(trailing_stop_bps), trailing_stop_pct),
               "Trailing stop: 100 bps = 1%");
 
 // Verify spread constants
-static_assert(near(lft::bps_to_percent(stock_spread_bps), stock_spread),
+static_assert(lft::near(lft::bps_to_percent(stock_spread_bps), stock_spread),
               "Stock spread: 2 bps = 0.02%");
-static_assert(near(lft::bps_to_percent(crypto_spread_bps), crypto_spread),
+static_assert(lft::near(lft::bps_to_percent(crypto_spread_bps), crypto_spread),
               "Crypto spread: 10 bps = 0.1%");
 
 // Noise and signal analysis
@@ -121,25 +116,25 @@ constexpr double apply_spread(double mid_price, double spread_pct,
 }
 
 // Basic P&L calculation tests
-static_assert(near(calc_pl_pct(100.0, 102.0), 0.02), "2% gain calculation");
-static_assert(near(calc_pl_pct(100.0, 98.0), -0.02), "-2% loss calculation");
-static_assert(near(calc_pl_pct(100.0, 100.0), 0.0), "No change calculation");
+static_assert(lft::near(calc_pl_pct(100.0, 102.0), 0.02), "2% gain calculation");
+static_assert(lft::near(calc_pl_pct(100.0, 98.0), -0.02), "-2% loss calculation");
+static_assert(lft::near(calc_pl_pct(100.0, 100.0), 0.0), "No change calculation");
 
 // Noise calculation tests
-static_assert(near(bar_noise(102.0, 98.0, 100.0), 0.04),
+static_assert(lft::near(bar_noise(102.0, 98.0, 100.0), 0.04),
               "4% noise: high=102, low=98, close=100");
-static_assert(near(bar_noise(100.5, 99.5, 100.0), 0.01),
+static_assert(lft::near(bar_noise(100.5, 99.5, 100.0), 0.01),
               "1% noise: tight range");
-static_assert(near(bar_noise(110.0, 90.0, 100.0), 0.20),
+static_assert(lft::near(bar_noise(110.0, 90.0, 100.0), 0.20),
               "20% noise: very volatile bar");
-static_assert(near(bar_noise(100.0, 100.0, 100.0), 0.0),
+static_assert(lft::near(bar_noise(100.0, 100.0, 100.0), 0.0),
               "0% noise: no movement");
 
 // Adaptive TP/SL tests
 // Low noise (0.5%) → use base 2% TP/SL (2% > 1.5%)
-static_assert(near(adaptive_take_profit(2_pc, 0.005), 2_pc),
+static_assert(lft::near(adaptive_take_profit(2_pc, 0.005), 2_pc),
               "Low noise: use base TP");
-static_assert(near(adaptive_stop_loss(2_pc, 0.005), 2_pc),
+static_assert(lft::near(adaptive_stop_loss(2_pc, 0.005), 2_pc),
               "Low noise: use base SL");
 
 // High noise (1%) → use base 2% TP/SL (2% < 3%)
@@ -167,7 +162,7 @@ static_assert(adaptive_take_profit(2_pc, 0.0066667) > 0.0199 &&
 // Realistic scenario: AAPL typical 0.3% intrabar range
 // 0.3% noise → 3x = 0.9%, base 2% wins
 constexpr auto aapl_noise = 0.003;
-static_assert(near(adaptive_take_profit(2_pc, aapl_noise), 2_pc),
+static_assert(lft::near(adaptive_take_profit(2_pc, aapl_noise), 2_pc),
               "AAPL typical noise: use base TP");
 
 // Volatile scenario: TSLA 1.5% intrabar range
@@ -211,15 +206,15 @@ static_assert(!is_trailing_stop(boundary_peak, boundary_threshold,
               "(must cross below)");
 
 // Spread application tests (2 basis points = 0.02%)
-static_assert(near(apply_spread(100.0, stock_spread, true), 100.01),
+static_assert(lft::near(apply_spread(100.0, stock_spread, true), 100.01),
               "Buy stock at ask (mid + half spread)");
-static_assert(near(apply_spread(100.0, stock_spread, false), 99.99),
+static_assert(lft::near(apply_spread(100.0, stock_spread, false), 99.99),
               "Sell stock at bid (mid - half spread)");
 
 // Crypto spread tests (10 basis points = 0.1%)
-static_assert(near(apply_spread(100.0, crypto_spread, true), 100.05),
+static_assert(lft::near(apply_spread(100.0, crypto_spread, true), 100.05),
               "Buy crypto at ask");
-static_assert(near(apply_spread(100.0, crypto_spread, false), 99.95),
+static_assert(lft::near(apply_spread(100.0, crypto_spread, false), 99.95),
               "Sell crypto at bid");
 
 // Realistic scenario: Entry at $100, peaked at $102, now at $101

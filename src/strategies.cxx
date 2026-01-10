@@ -342,4 +342,41 @@ StrategySignal Strategies::evaluate_volume_surge(const PriceHistory& history) {
     return signal;
 }
 
+// Calculate bid-ask spread in basis points
+double Strategies::calculate_spread_bps(const Snapshot& snap) {
+    // Spread = (ask - bid) / mid_price
+    auto mid_price = (snap.latest_quote_ask + snap.latest_quote_bid) / 2.0;
+
+    // Defensive checks
+    if (mid_price <= 0.0 or snap.latest_quote_ask <= 0.0 or
+        snap.latest_quote_bid <= 0.0 or snap.latest_quote_ask < snap.latest_quote_bid)
+        return 10000.0;  // Return impossibly high spread to block trade
+
+    auto spread = snap.latest_quote_ask - snap.latest_quote_bid;
+    return price_change_to_bps(spread, mid_price);
+}
+
+// Calculate current volume as ratio of average volume
+double Strategies::calculate_volume_ratio(const PriceHistory& history) {
+    if (history.volumes.empty())
+        return 0.0;
+
+    auto avg = history.avg_volume();
+    if (avg == 0)
+        return 0.0;
+
+    auto current_vol = static_cast<double>(history.volumes.back());
+    return current_vol / avg;
+}
+
+// Check if trade is eligible based on spread and volume criteria
+bool Strategies::is_tradeable(const Snapshot& snap, const PriceHistory& history,
+                               double max_spread_bps, double min_volume_ratio) {
+    auto spread_bps = calculate_spread_bps(snap);
+    auto vol_ratio = calculate_volume_ratio(history);
+
+    // Block trade if spread too wide or volume too low
+    return spread_bps <= max_spread_bps and vol_ratio >= min_volume_ratio;
+}
+
 } // namespace lft
