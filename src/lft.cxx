@@ -238,10 +238,8 @@ void process_bar(
     auto bar_time = parse_bar_timestamp(bar.timestamp);
     auto market_status = get_market_status(bar_time);
 
-    if (not market_status.is_open) {
-      return; // Skip this bar - outside regular trading hours (9:30 AM - 4:00
-              // PM ET)
-    }
+    if (not market_status.is_open)
+      return; // Skip this bar - outside regular trading hours (9:30 AM - 4:00 PM ET)
   }
 
   history.add_bar(bar.close, bar.high, bar.low, bar.volume);
@@ -327,9 +325,8 @@ void process_bar(
       }
 
       // Noise regime filtering: disable mean reversion in low noise
-      if (low_noise_regime and signal.strategy_name == "mean_reversion") {
+      if (low_noise_regime and signal.strategy_name == "mean_reversion")
         continue; // Skip mean reversion in trending conditions
-      }
 
       if (signal.should_buy) {
         ++stats.strategy_stats[signal.strategy_name].signals_generated;
