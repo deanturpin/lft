@@ -971,7 +971,7 @@ void run_live_trading(
   for (const auto &[name, config] : configs)
     strategy_stats[name] = lft::StrategyStats{name};
 
-  for (auto cycle : std::views::iota(1, max_cycles + 1)) {
+  for (auto cycle : std::views::iota(0, max_cycles)) {
     auto now = std::chrono::system_clock::now();
     std::println("\n{:-<70}", "");
     std::println("Tick at {:%Y-%m-%d %H:%M:%S}", now);
