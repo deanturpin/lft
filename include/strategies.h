@@ -14,7 +14,8 @@ struct StrategySignal {
     bool should_buy{false};
     std::string reason;
     std::string strategy_name;
-    double confidence{1.0};  // Signal confidence: 0.0-1.0 (reduced by noise/low volume)
+    double confidence{1.0};      // Signal confidence: 0.0-1.0 (reduced by noise/low volume)
+    double expected_move_bps{0.0}; // Expected price move in basis points (for cost/edge calculation)
 };
 
 // Strategy configuration (exit criteria are now unified, not per-strategy)

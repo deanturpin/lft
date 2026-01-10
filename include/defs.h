@@ -12,6 +12,11 @@ constexpr auto max_spread_bps_stocks = 60.0;  // Max 60 bps (0.60%) spread for s
 constexpr auto max_spread_bps_crypto = 100.0; // Max 100 bps (1.00%) spread for crypto
 constexpr auto min_volume_ratio = 0.5;        // Min 50% of 20-period average volume
 
+// Cost estimation (Tier 2 - Edge Reality)
+constexpr auto slippage_buffer_bps = 3.0;     // Pessimistic slippage estimate (3 bps)
+constexpr auto adverse_selection_bps = 2.0;   // Adverse selection cost (2 bps)
+constexpr auto min_edge_bps = 10.0;           // Minimum edge required after costs (10 bps)
+
 // Asset watchlists
 #include <string>
 #include <vector>

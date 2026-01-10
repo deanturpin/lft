@@ -538,6 +538,18 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
                status, colour_reset);
 }
 
+// Calculate total estimated costs for a trade in basis points
+double calculate_total_cost_bps(double spread_bps) {
+  // Total cost = spread + slippage buffer + adverse selection
+  return spread_bps + slippage_buffer_bps + adverse_selection_bps;
+}
+
+// Check if trade has positive edge after costs
+bool has_positive_edge(double expected_move_bps, double total_cost_bps) {
+  auto net_edge_bps = expected_move_bps - total_cost_bps;
+  return net_edge_bps >= min_edge_bps;
+}
+
 // Check if US stock market is open and time until open/close
 MarketStatus
 get_market_status(const std::chrono::system_clock::time_point &now) {
@@ -1036,8 +1048,45 @@ void run_live_trading(
                   break; // Skip this trade and move to next symbol
                 }
 
+                // Check if trade has positive edge after costs
+                auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
+                auto total_cost_bps = calculate_total_cost_bps(spread_bps);
+
+                // Use expected move from signal, or default to 2x costs if not set
+                auto expected_move_bps = signal.expected_move_bps > 0.0
+                                             ? signal.expected_move_bps
+                                             : total_cost_bps * 2.0;
+
+                if (not has_positive_edge(expected_move_bps, total_cost_bps)) {
+                  auto net_edge_bps = expected_move_bps - total_cost_bps;
+                  std::println("{}💸 TRADE BLOCKED: Insufficient edge{}", colour_yellow,
+                               colour_reset);
+                  std::println(
+                      "   Expected move: {:.1f} bps, Total cost: {:.1f} bps "
+                      "(spread {:.1f} + slippage {:.1f} + adverse {:.1f})",
+                      expected_move_bps, total_cost_bps, spread_bps,
+                      slippage_buffer_bps, adverse_selection_bps);
+                  std::println("   Net edge: {:.1f} bps (min required: {:.1f} bps)",
+                               net_edge_bps, min_edge_bps);
+                  std::println("   Signal: {} - {}", signal.strategy_name,
+                               signal.reason);
+
+                  // Log cost-blocked trade (reuse blocked trades CSV)
+                  auto vol_ratio =
+                      lft::Strategies::calculate_volume_ratio(history);
+                  log_blocked_trade(symbol, signal.strategy_name,
+                                    signal.reason, spread_bps, max_spread,
+                                    vol_ratio, min_volume_ratio, now);
+
+                  break; // Skip this trade and move to next symbol
+                }
+
                 std::println("{}🚨 SIGNAL: {} - {}{}", colour_cyan,
                              signal.strategy_name, signal.reason, colour_reset);
+                std::println("   Expected move: {:.1f} bps, Cost: {:.1f} bps, Net "
+                             "edge: {:.1f} bps",
+                             expected_move_bps, total_cost_bps,
+                             expected_move_bps - total_cost_bps);
                 std::println("   Buying ${:.0f} of {}...", notional_amount,
                              symbol);
 
@@ -1202,8 +1251,45 @@ void run_live_trading(
                   break; // Skip this trade and move to next symbol
                 }
 
+                // Check if trade has positive edge after costs
+                auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
+                auto total_cost_bps = calculate_total_cost_bps(spread_bps);
+
+                // Use expected move from signal, or default to 2x costs if not set
+                auto expected_move_bps = signal.expected_move_bps > 0.0
+                                             ? signal.expected_move_bps
+                                             : total_cost_bps * 2.0;
+
+                if (not has_positive_edge(expected_move_bps, total_cost_bps)) {
+                  auto net_edge_bps = expected_move_bps - total_cost_bps;
+                  std::println("{}💸 TRADE BLOCKED: Insufficient edge{}", colour_yellow,
+                               colour_reset);
+                  std::println(
+                      "   Expected move: {:.1f} bps, Total cost: {:.1f} bps "
+                      "(spread {:.1f} + slippage {:.1f} + adverse {:.1f})",
+                      expected_move_bps, total_cost_bps, spread_bps,
+                      slippage_buffer_bps, adverse_selection_bps);
+                  std::println("   Net edge: {:.1f} bps (min required: {:.1f} bps)",
+                               net_edge_bps, min_edge_bps);
+                  std::println("   Signal: {} - {}", signal.strategy_name,
+                               signal.reason);
+
+                  // Log cost-blocked trade (reuse blocked trades CSV)
+                  auto vol_ratio =
+                      lft::Strategies::calculate_volume_ratio(history);
+                  log_blocked_trade(symbol, signal.strategy_name,
+                                    signal.reason, spread_bps, max_spread,
+                                    vol_ratio, min_volume_ratio, now);
+
+                  break; // Skip this trade and move to next symbol
+                }
+
                 std::println("{}🚨 SIGNAL: {} - {}{}", colour_cyan,
                              signal.strategy_name, signal.reason, colour_reset);
+                std::println("   Expected move: {:.1f} bps, Cost: {:.1f} bps, Net "
+                             "edge: {:.1f} bps",
+                             expected_move_bps, total_cost_bps,
+                             expected_move_bps - total_cost_bps);
                 std::println("   Buying ${:.0f} of {}...", notional_amount,
                              symbol);
 
