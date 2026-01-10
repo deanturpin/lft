@@ -49,7 +49,7 @@ constexpr auto countdown_seconds = 10;
 // CSV file constants
 constexpr auto orders_csv_filename = "lft_orders.csv"sv;
 constexpr auto exits_csv_filename = "lft_exits.csv"sv;
-constexpr auto orders_csv_header = "timestamp,symbol,strategy,order_id,entry_price,quantity,notional,account_balance\n"sv;
+constexpr auto orders_csv_header = "timestamp,symbol,strategy,order_id,expected_price,entry_price,slippage_abs,slippage_pct,spread_pct,quantity,notional,account_balance\n"sv;
 constexpr auto exits_csv_header = "timestamp,symbol,order_id,exit_price,exit_reason,peak_price,account_balance\n"sv;
 
 // Position tracking for backtest
@@ -667,8 +667,9 @@ void print_strategy_stats(
 }
 
 void log_order_entry(std::string_view symbol, std::string_view strategy,
-                     std::string_view order_id, double entry_price,
-                     double quantity, double notional,
+                     std::string_view order_id, double expected_price,
+                     double entry_price, double spread_pct, double quantity,
+                     double notional,
                      const std::chrono::system_clock::time_point &entry_time,
                      double account_balance) {
 
@@ -686,16 +687,26 @@ void log_order_entry(std::string_view symbol, std::string_view strategy,
   if (not file_exists)
     file << orders_csv_header;
 
-  // Write order entry data
-  file << std::format("{:%Y-%m-%d %H:%M:%S},{},{},{},{:.4f},{:.6f},{:.2f},"
-                      "{:.2f}\n",
-                      entry_time, symbol, strategy, order_id, entry_price,
-                      quantity, notional, account_balance);
+  // Calculate slippage
+  auto slippage_abs = entry_price - expected_price;
+  auto slippage_pct =
+      expected_price > 0.0 ? (slippage_abs / expected_price) * 100.0 : 0.0;
+
+  // Write order entry data with slippage metrics
+  file << std::format(
+      "{:%Y-%m-%d %H:%M:%S},{},{},{},{:.4f},{:.4f},{:.4f},{:.3f}%,{:.3f}%,{:."
+      "6f},{:.2f},{:.2f}\n",
+      entry_time, symbol, strategy, order_id, expected_price, entry_price,
+      slippage_abs, slippage_pct, spread_pct, quantity, notional,
+      account_balance);
 
   file.close();
 
-  std::println("{}📝 Order logged to: {}{}", colour_green,
-               orders_csv_filename.data(), colour_reset);
+  // Log slippage info to console
+  auto slippage_colour = slippage_abs > 0.0 ? colour_red : colour_green;
+  std::println("{}📝 Order logged: slippage {}{:.4f} ({:.3f}%){}",
+               colour_green, slippage_colour, slippage_abs, slippage_pct,
+               colour_reset);
 }
 
 void log_exit(std::string_view symbol, std::string_view order_id,
@@ -1013,9 +1024,20 @@ void run_live_trading(
                                     order_json["filled_qty"].get<std::string>())
                               : notional_amount / filled_price;
 
+                      // Calculate expected price (ask for buy orders) and spread
+                      auto expected_price = snap.latest_quote_ask;
+                      auto spread_abs =
+                          snap.latest_quote_ask - snap.latest_quote_bid;
+                      auto mid_price =
+                          (snap.latest_quote_bid + snap.latest_quote_ask) / 2.0;
+                      auto spread_pct =
+                          mid_price > 0.0 ? (spread_abs / mid_price) * 100.0
+                                          : 0.0;
+
                       log_order_entry(symbol, signal.strategy_name, order_id,
-                                      filled_price, quantity_filled,
-                                      notional_amount, now, balance);
+                                      expected_price, filled_price, spread_pct,
+                                      quantity_filled, notional_amount, now,
+                                      balance);
                     } else {
                       std::println("{}⚠  Order status '{}' - may not execute{}",
                                    colour_yellow, status, colour_reset);
@@ -1162,9 +1184,20 @@ void run_live_trading(
                                     order_json["filled_qty"].get<std::string>())
                               : notional_amount / filled_price;
 
+                      // Calculate expected price (ask for buy orders) and spread
+                      auto expected_price = snap.latest_quote_ask;
+                      auto spread_abs =
+                          snap.latest_quote_ask - snap.latest_quote_bid;
+                      auto mid_price =
+                          (snap.latest_quote_bid + snap.latest_quote_ask) / 2.0;
+                      auto spread_pct =
+                          mid_price > 0.0 ? (spread_abs / mid_price) * 100.0
+                                          : 0.0;
+
                       log_order_entry(symbol, signal.strategy_name, order_id,
-                                      filled_price, quantity_filled,
-                                      notional_amount, now, balance);
+                                      expected_price, filled_price, spread_pct,
+                                      quantity_filled, notional_amount, now,
+                                      balance);
                     } else {
                       std::println("{}⚠  Order status '{}' - may not execute{}",
                                    colour_yellow, status, colour_reset);
