@@ -1181,9 +1181,8 @@ void run_live_trading(
     auto next_update = std::chrono::floor<std::chrono::seconds>(now + sleep_duration);
     auto cycles_remaining = max_cycles - cycle;
 
-    std::println(
-        "\n⏳ Next update at {:%H:%M:%S} - {} seconds | {} cycles until re-calibration\n",
-        next_update, sleep_duration.count(), cycles_remaining);
+    std::println("\n⏳ Next update at {:%H:%M:%S} | {} cycles remaining\n",
+                 next_update, cycles_remaining);
     std::this_thread::sleep_for(sleep_duration);
   }
 }
