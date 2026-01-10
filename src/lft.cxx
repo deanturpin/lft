@@ -156,6 +156,29 @@ bool file_exists(std::string_view filename) {
   return std::ifstream{filename.data()}.good();
 }
 
+// Compile-time tests for helper functions
+namespace {
+// Test: is_crypto correctly identifies crypto pairs
+static_assert(is_crypto("BTC/USD"), "BTC/USD should be identified as crypto");
+static_assert(is_crypto("ETH/USD"), "ETH/USD should be identified as crypto");
+static_assert(not is_crypto("AAPL"), "AAPL should not be identified as crypto");
+static_assert(not is_crypto("TSLA"), "TSLA should not be identified as crypto");
+
+// Test: get_spread returns correct spread for asset type
+static_assert(get_spread(true) == crypto_spread,
+              "get_spread(true) should return crypto_spread");
+static_assert(get_spread(false) == stock_spread,
+              "get_spread(false) should return stock_spread");
+
+// Test: get_max_spread_bps returns correct threshold for asset type
+static_assert(get_max_spread_bps(true) == max_spread_bps_crypto,
+              "get_max_spread_bps(true) should return crypto threshold");
+static_assert(get_max_spread_bps(false) == max_spread_bps_stocks,
+              "get_max_spread_bps(false) should return stock threshold");
+static_assert(get_max_spread_bps(true) >= get_max_spread_bps(false),
+              "Crypto spread threshold should be >= stock threshold");
+} // namespace
+
 void process_bar(
     const std::string &symbol, const lft::Bar &bar, std::size_t bar_index,
     lft::PriceHistory &history,
