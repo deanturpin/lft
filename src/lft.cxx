@@ -1178,11 +1178,11 @@ void run_live_trading(
 
     // Calculate sleep duration to align to :35 past next minute
     auto sleep_duration = sleep_until_bar_ready(now);
-    auto next_update = now + sleep_duration;
+    auto next_update = std::chrono::floor<std::chrono::seconds>(now + sleep_duration);
     auto cycles_remaining = max_cycles - cycle;
 
     std::println(
-        "\n⏳ Next update at {:%H:%M:%S} ({} seconds) | {} cycles until re-calibration\n",
+        "\n⏳ Next update at {:%H:%M:%S} - {} seconds | {} cycles until re-calibration\n",
         next_update, sleep_duration.count(), cycles_remaining);
     std::this_thread::sleep_for(sleep_duration);
   }
