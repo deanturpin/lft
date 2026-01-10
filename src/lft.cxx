@@ -76,7 +76,8 @@ MarketStatus get_market_status(const std::chrono::system_clock::time_point &);
 // Calculate sleep duration to align to 35 seconds past the next minute
 // Alpaca recalculates bars at :30 past each minute to include late trades
 // Polling at :35 ensures we get the final, recalculated bar data
-std::chrono::seconds sleep_until_bar_ready(const std::chrono::system_clock::time_point& now) {
+std::chrono::seconds
+sleep_until_bar_ready(const std::chrono::system_clock::time_point &now) {
   using namespace std::chrono;
 
   // Get current time broken down
@@ -86,17 +87,9 @@ std::chrono::seconds sleep_until_bar_ready(const std::chrono::system_clock::time
   // Calculate target: 35 seconds past the NEXT minute
   auto current_second = now_tm.tm_sec;
 
-  // If we're before :35, target is :35 this minute
-  // If we're at or after :35, target is :35 next minute
-  auto seconds_to_wait = 0;
-
-  if (current_second < 35) {
-    // Wait until :35 this minute
-    seconds_to_wait = 35 - current_second;
-  } else {
-    // Wait until :35 next minute (60 - current + 35)
-    seconds_to_wait = 60 - current_second + 35;
-  }
+  // If we're before :35, target is :35 this minute, otherwise :35 next minute
+  auto seconds_to_wait = current_second < 35 ? 35 - current_second
+                                              : 60 - current_second + 35;
 
   return seconds{seconds_to_wait};
 }
@@ -579,27 +572,26 @@ void print_account_stats(lft::AlpacaClient &client,
 
   // Day trading buying power with warning
   if (daytrading_buying_power <= 0.0) {
-    std::println("{}Day Trade BP:      ${:>12.2f}  ⚠️  EXHAUSTED{}",
-                 colour_red, daytrading_buying_power, colour_reset);
+    std::println("{}Day Trade BP:      ${:>12.2f}  ⚠️  EXHAUSTED{}", colour_red,
+                 daytrading_buying_power, colour_reset);
   } else if (daytrading_buying_power < notional_amount) {
-    std::println("{}Day Trade BP:      ${:>12.2f}  ⚠️  LOW{}",
-                 colour_yellow, daytrading_buying_power, colour_reset);
+    std::println("{}Day Trade BP:      ${:>12.2f}  ⚠️  LOW{}", colour_yellow,
+                 daytrading_buying_power, colour_reset);
   } else {
     std::println("Day Trade BP:      ${:>12.2f}", daytrading_buying_power);
   }
 
   // Pattern day trader status with day trade count
   auto pdt_colour = is_pdt ? colour_yellow : colour_reset;
-  std::println("{}Pattern Day Trader: {} ({}/3 day trades used){}",
-               pdt_colour, is_pdt ? "YES" : "NO", daytrade_count,
-               colour_reset);
+  std::println("{}Pattern Day Trader: {} ({}/3 day trades used){}", pdt_colour,
+               is_pdt ? "YES" : "NO", daytrade_count, colour_reset);
 
   // Trading status
   auto status_text = trading_blocked ? "BLOCKED" : "ACTIVE";
   auto status_icon = trading_blocked ? "❌" : "✅";
   auto trading_colour = trading_blocked ? colour_red : colour_green;
-  std::println("{}Trading Status:     {} {}{}",
-               trading_colour, status_text, status_icon, colour_reset);
+  std::println("{}Trading Status:     {} {}{}", trading_colour, status_text,
+               status_icon, colour_reset);
 
   // Market status
   auto market_status = get_market_status(now);
@@ -612,7 +604,8 @@ void print_account_stats(lft::AlpacaClient &client,
                  colour_red, colour_reset);
   }
   if (daytrading_buying_power <= 0.0) {
-    std::println("{}⚠  WARNING: No day trading buying power - new positions may be rejected{}",
+    std::println("{}⚠  WARNING: No day trading buying power - new positions "
+                 "may be rejected{}",
                  colour_yellow, colour_reset);
   }
   if (cash < notional_amount) {
@@ -657,8 +650,8 @@ void log_order_entry(std::string_view symbol, std::string_view strategy,
 
   auto file = std::ofstream{filename, std::ios::app};
   if (not file.is_open()) {
-    std::println("{}⚠  Failed to write order log: {}{}", colour_yellow, filename,
-                 colour_reset);
+    std::println("{}⚠  Failed to write order log: {}{}", colour_yellow,
+                 filename, colour_reset);
     return;
   }
 
@@ -680,9 +673,9 @@ void log_order_entry(std::string_view symbol, std::string_view strategy,
 }
 
 void log_exit(std::string_view symbol, std::string_view order_id,
-               std::string_view exit_reason, double exit_price,
-               const std::chrono::system_clock::time_point &exit_time,
-               double peak_price, double account_balance) {
+              std::string_view exit_reason, double exit_price,
+              const std::chrono::system_clock::time_point &exit_time,
+              double peak_price, double account_balance) {
 
   auto filename = std::string{"lft_exits.csv"};
 
@@ -926,17 +919,24 @@ void run_live_trading(
 
                 // Check trade eligibility (spread and volume filters)
                 auto is_crypto = symbol.find('/') != std::string::npos;
-                auto max_spread = is_crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
+                auto max_spread =
+                    is_crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
 
-                if (not lft::Strategies::is_tradeable(snap, history, max_spread, min_volume_ratio)) {
+                if (not lft::Strategies::is_tradeable(snap, history, max_spread,
+                                                      min_volume_ratio)) {
                   auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
-                  auto vol_ratio = lft::Strategies::calculate_volume_ratio(history);
+                  auto vol_ratio =
+                      lft::Strategies::calculate_volume_ratio(history);
 
-                  std::println("{}⛔ TRADE BLOCKED: {}{}", colour_yellow, symbol, colour_reset);
-                  std::println("   Spread: {:.1f} bps (max {:.1f}), Volume: {:.1f}x avg (min {:.1f}x)",
-                               spread_bps, max_spread, vol_ratio, min_volume_ratio);
-                  std::println("   Signal: {} - {}", signal.strategy_name, signal.reason);
-                  break;  // Skip this trade and move to next symbol
+                  std::println("{}⛔ TRADE BLOCKED: {}{}", colour_yellow,
+                               symbol, colour_reset);
+                  std::println("   Spread: {:.1f} bps (max {:.1f}), Volume: "
+                               "{:.1f}x avg (min {:.1f}x)",
+                               spread_bps, max_spread, vol_ratio,
+                               min_volume_ratio);
+                  std::println("   Signal: {} - {}", signal.strategy_name,
+                               signal.reason);
+                  break; // Skip this trade and move to next symbol
                 }
 
                 std::println("{}🚨 SIGNAL: {} - {}{}", colour_cyan,
@@ -981,17 +981,18 @@ void run_live_trading(
                       // Estimate filled price and quantity from order response
                       auto filled_price =
                           order_json.contains("filled_avg_price")
-                              ? std::stod(
-                                    order_json["filled_avg_price"].get<std::string>())
+                              ? std::stod(order_json["filled_avg_price"]
+                                              .get<std::string>())
                               : 0.0;
                       auto quantity_filled =
                           order_json.contains("filled_qty")
-                              ? std::stod(order_json["filled_qty"].get<std::string>())
+                              ? std::stod(
+                                    order_json["filled_qty"].get<std::string>())
                               : notional_amount / filled_price;
 
                       log_order_entry(symbol, signal.strategy_name, order_id,
-                                      filled_price, quantity_filled, notional_amount,
-                                      now, balance);
+                                      filled_price, quantity_filled,
+                                      notional_amount, now, balance);
                     } else {
                       std::println("{}⚠  Order status '{}' - may not execute{}",
                                    colour_yellow, status, colour_reset);
@@ -1004,9 +1005,10 @@ void run_live_trading(
                   }
                 } else {
                   // Order failed - explain why and continue
-                  std::println("{}❌ Order failed for {}: {}{}",
-                               colour_red, symbol,
-                               "likely insufficient buying power or non-marginable security",
+                  std::println("{}❌ Order failed for {}: {}{}", colour_red,
+                               symbol,
+                               "likely insufficient buying power or "
+                               "non-marginable security",
                                colour_reset);
                   std::println("{}   Continuing with other symbols...{}",
                                colour_yellow, colour_reset);
@@ -1067,17 +1069,24 @@ void run_live_trading(
 
                 // Check trade eligibility (spread and volume filters)
                 auto is_crypto = symbol.find('/') != std::string::npos;
-                auto max_spread = is_crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
+                auto max_spread =
+                    is_crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
 
-                if (not lft::Strategies::is_tradeable(snap, history, max_spread, min_volume_ratio)) {
+                if (not lft::Strategies::is_tradeable(snap, history, max_spread,
+                                                      min_volume_ratio)) {
                   auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
-                  auto vol_ratio = lft::Strategies::calculate_volume_ratio(history);
+                  auto vol_ratio =
+                      lft::Strategies::calculate_volume_ratio(history);
 
-                  std::println("{}⛔ TRADE BLOCKED: {}{}", colour_yellow, symbol, colour_reset);
-                  std::println("   Spread: {:.1f} bps (max {:.1f}), Volume: {:.1f}x avg (min {:.1f}x)",
-                               spread_bps, max_spread, vol_ratio, min_volume_ratio);
-                  std::println("   Signal: {} - {}", signal.strategy_name, signal.reason);
-                  break;  // Skip this trade and move to next symbol
+                  std::println("{}⛔ TRADE BLOCKED: {}{}", colour_yellow,
+                               symbol, colour_reset);
+                  std::println("   Spread: {:.1f} bps (max {:.1f}), Volume: "
+                               "{:.1f}x avg (min {:.1f}x)",
+                               spread_bps, max_spread, vol_ratio,
+                               min_volume_ratio);
+                  std::println("   Signal: {} - {}", signal.strategy_name,
+                               signal.reason);
+                  break; // Skip this trade and move to next symbol
                 }
 
                 std::println("{}🚨 SIGNAL: {} - {}{}", colour_cyan,
@@ -1122,17 +1131,18 @@ void run_live_trading(
                       // Estimate filled price and quantity from order response
                       auto filled_price =
                           order_json.contains("filled_avg_price")
-                              ? std::stod(
-                                    order_json["filled_avg_price"].get<std::string>())
+                              ? std::stod(order_json["filled_avg_price"]
+                                              .get<std::string>())
                               : 0.0;
                       auto quantity_filled =
                           order_json.contains("filled_qty")
-                              ? std::stod(order_json["filled_qty"].get<std::string>())
+                              ? std::stod(
+                                    order_json["filled_qty"].get<std::string>())
                               : notional_amount / filled_price;
 
                       log_order_entry(symbol, signal.strategy_name, order_id,
-                                      filled_price, quantity_filled, notional_amount,
-                                      now, balance);
+                                      filled_price, quantity_filled,
+                                      notional_amount, now, balance);
                     } else {
                       std::println("{}⚠  Order status '{}' - may not execute{}",
                                    colour_yellow, status, colour_reset);
@@ -1145,9 +1155,10 @@ void run_live_trading(
                   }
                 } else {
                   // Order failed - explain why and continue
-                  std::println("{}❌ Order failed for {}: {}{}",
-                               colour_red, symbol,
-                               "likely insufficient buying power or non-marginable security",
+                  std::println("{}❌ Order failed for {}: {}{}", colour_red,
+                               symbol,
+                               "likely insufficient buying power or "
+                               "non-marginable security",
                                colour_reset);
                   std::println("{}   Continuing with other symbols...{}",
                                colour_yellow, colour_reset);
@@ -1178,7 +1189,8 @@ void run_live_trading(
 
     // Calculate sleep duration to align to :35 past next minute
     auto sleep_duration = sleep_until_bar_ready(now);
-    auto next_update = std::chrono::floor<std::chrono::seconds>(now + sleep_duration);
+    auto next_update =
+        std::chrono::floor<std::chrono::seconds>(now + sleep_duration);
     auto cycles_remaining = max_cycles - cycle;
 
     std::println("\n⏳ Next update at {:%H:%M:%S} | {} cycles remaining\n",
@@ -1198,7 +1210,6 @@ int main() {
   }
 
   std::println("{}🤖 LFT - LOW FREQUENCY TRADER{}", colour_cyan, colour_reset);
-  std::println("Calibrate → Execute Workflow\n");
 
   // Phase 1: Calibrate
   auto configs = calibrate_all_strategies(client, stocks, crypto);
