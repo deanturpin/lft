@@ -54,6 +54,23 @@ constexpr auto orders_csv_header = "timestamp,symbol,strategy,order_id,expected_
 constexpr auto exits_csv_header = "timestamp,symbol,order_id,exit_price,exit_reason,peak_price,account_balance\n"sv;
 constexpr auto blocked_csv_header = "timestamp,symbol,strategy,signal_reason,spread_bps,max_spread_bps,volume_ratio,min_volume_ratio,block_reason\n"sv;
 
+// Compile-time validation of trading constants
+static_assert(starting_capital > 0.0, "Starting capital must be positive");
+static_assert(starting_capital >= 1000.0, "Starting capital too low - min $1000");
+static_assert(low_noise_threshold > 0.0, "Low noise threshold must be positive");
+static_assert(high_noise_threshold > low_noise_threshold,
+              "High noise threshold must be higher than low noise threshold");
+static_assert(high_noise_threshold < 1.0,
+              "High noise threshold too high - would never trigger");
+static_assert(dst_start_month >= 0 and dst_start_month <= 11,
+              "DST start month must be 0-11 (Jan-Dec)");
+static_assert(dst_end_month >= 0 and dst_end_month <= 11,
+              "DST end month must be 0-11 (Jan-Dec)");
+static_assert(dst_end_month > dst_start_month,
+              "DST end month must be after start month");
+static_assert(countdown_seconds > 0 and countdown_seconds <= 60,
+              "Countdown should be 1-60 seconds");
+
 // Position tracking for backtest
 struct Position {
   std::string symbol;
@@ -564,16 +581,47 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
 }
 
 // Calculate total estimated costs for a trade in basis points
-double calculate_total_cost_bps(double spread_bps) {
+constexpr double calculate_total_cost_bps(double spread_bps) {
   // Total cost = spread + slippage buffer + adverse selection
   return spread_bps + slippage_buffer_bps + adverse_selection_bps;
 }
 
 // Check if trade has positive edge after costs
-bool has_positive_edge(double expected_move_bps, double total_cost_bps) {
+constexpr bool has_positive_edge(double expected_move_bps, double total_cost_bps) {
   auto net_edge_bps = expected_move_bps - total_cost_bps;
   return net_edge_bps >= min_edge_bps;
 }
+
+// Compile-time tests for cost calculation logic
+namespace {
+// Test: Total cost includes all components
+constexpr auto test_spread = 10.0;
+constexpr auto test_total_cost = calculate_total_cost_bps(test_spread);
+static_assert(test_total_cost == test_spread + slippage_buffer_bps + adverse_selection_bps,
+              "Total cost should equal spread + slippage + adverse selection");
+
+// Test: Edge calculation with profitable trade
+constexpr auto test_expected_move = 50.0; // 50 bps expected
+constexpr auto test_costs = 15.0;         // 15 bps costs
+static_assert(has_positive_edge(test_expected_move, test_costs),
+              "50 bps move - 15 bps costs = 35 bps edge, should pass (min 10 bps)");
+
+// Test: Edge calculation with marginal trade
+constexpr auto marginal_move = 20.0;  // 20 bps expected
+constexpr auto marginal_costs = 15.0; // 15 bps costs
+static_assert(not has_positive_edge(marginal_move, marginal_costs),
+              "20 bps move - 15 bps costs = 5 bps edge, should fail (min 10 bps)");
+
+// Test: Edge calculation with negative edge
+static_assert(not has_positive_edge(10.0, 20.0),
+              "10 bps move - 20 bps costs = -10 bps edge, should fail");
+
+// Test: Minimum edge boundary
+constexpr auto boundary_move = min_edge_bps + 5.0;
+constexpr auto boundary_costs = 5.0;
+static_assert(has_positive_edge(boundary_move, boundary_costs),
+              "Exactly min_edge_bps net should pass");
+} // namespace
 
 // Check if US stock market is open and time until open/close
 MarketStatus

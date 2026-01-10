@@ -153,4 +153,20 @@ static_assert(max_spread_bps_crypto <= 200.0, "Crypto spread filter too loose - 
 static_assert(min_volume_ratio > 0.0, "Volume ratio filter must be positive");
 static_assert(min_volume_ratio <= 1.0, "Volume ratio filter cannot exceed 100%");
 
+// Cost estimation checks
+static_assert(slippage_buffer_bps >= 0.0, "Slippage buffer cannot be negative");
+static_assert(slippage_buffer_bps <= 10.0, "Slippage buffer too high - max 10 bps");
+static_assert(adverse_selection_bps >= 0.0, "Adverse selection cost cannot be negative");
+static_assert(adverse_selection_bps <= 10.0, "Adverse selection cost too high - max 10 bps");
+static_assert(min_edge_bps > 0.0, "Minimum edge must be positive");
+static_assert(min_edge_bps >= slippage_buffer_bps + adverse_selection_bps,
+              "Minimum edge should cover at least slippage + adverse selection");
+static_assert(min_edge_bps <= 50.0, "Minimum edge too high - may block all trades");
+
+// Sanity check: total costs should be reasonable
+static_assert(slippage_buffer_bps + adverse_selection_bps < max_spread_bps_stocks,
+              "Total non-spread costs should be less than max spread");
+static_assert(slippage_buffer_bps + adverse_selection_bps + max_spread_bps_stocks < 100.0,
+              "Total costs (spread + slippage + adverse) exceed 100 bps - unrealistic");
+
 } // namespace lft
