@@ -73,6 +73,34 @@ struct MarketStatus {
 };
 MarketStatus get_market_status(const std::chrono::system_clock::time_point &);
 
+// Calculate sleep duration to align to 35 seconds past the next minute
+// Alpaca recalculates bars at :30 past each minute to include late trades
+// Polling at :35 ensures we get the final, recalculated bar data
+std::chrono::seconds sleep_until_bar_ready(const std::chrono::system_clock::time_point& now) {
+  using namespace std::chrono;
+
+  // Get current time broken down
+  auto now_t = system_clock::to_time_t(now);
+  auto now_tm = *std::localtime(&now_t);
+
+  // Calculate target: 35 seconds past the NEXT minute
+  auto current_second = now_tm.tm_sec;
+
+  // If we're before :35, target is :35 this minute
+  // If we're at or after :35, target is :35 next minute
+  auto seconds_to_wait = 0;
+
+  if (current_second < 35) {
+    // Wait until :35 this minute
+    seconds_to_wait = 35 - current_second;
+  } else {
+    // Wait until :35 next minute (60 - current + 35)
+    seconds_to_wait = 60 - current_second + 35;
+  }
+
+  return seconds{seconds_to_wait};
+}
+
 void process_bar(const std::string &symbol, const lft::Bar &bar,
                  std::size_t bar_index, lft::PriceHistory &history,
                  const std::map<std::string, lft::PriceHistory> &all_histories,
@@ -1148,14 +1176,15 @@ void run_live_trading(
     // Print stats
     print_strategy_stats(strategy_stats);
 
-    // Calculate cycles remaining and next update time
+    // Calculate sleep duration to align to :35 past next minute
+    auto sleep_duration = sleep_until_bar_ready(now);
+    auto next_update = now + sleep_duration;
     auto cycles_remaining = max_cycles - cycle;
-    auto next_update = now + std::chrono::seconds{poll_interval_seconds};
 
     std::println(
-        "\n⏳ Next update at {:%H:%M:%S} | {} cycles until re-calibration\n",
-        next_update, cycles_remaining);
-    std::this_thread::sleep_for(std::chrono::seconds{poll_interval_seconds});
+        "\n⏳ Next update at {:%H:%M:%S} ({} seconds) | {} cycles until re-calibration\n",
+        next_update, sleep_duration.count(), cycles_remaining);
+    std::this_thread::sleep_for(sleep_duration);
   }
 }
 

@@ -73,7 +73,8 @@ inline const auto crypto = std::vector<std::string>{
 };
 
 // Timing parameters
-constexpr auto poll_interval_seconds = 65; // 60s bar + buffer
+// Note: Actual polling is aligned to :35 past each minute (see sleep_until_bar_ready)
+// Alpaca recalculates bars at :30 to include late trades, so :35 ensures complete data
 constexpr auto max_cycles = 60; // Run for 60 minutes then re-calibrate
 
 // Alert thresholds
@@ -122,10 +123,6 @@ static_assert(calibration_days >= 7,
               "Calibration period too short - minimum 7 days");
 static_assert(calibration_days <= 365,
               "Calibration period too long - max 1 year");
-static_assert(poll_interval_seconds >= 60,
-              "Poll interval too short - minimum 60s for 1Min bars");
-static_assert(poll_interval_seconds <= 300,
-              "Poll interval too long - max 5 minutes");
 static_assert(max_cycles > 0, "Must run at least 1 cycle");
 static_assert(max_cycles <= 1440,
               "Too many cycles - max 1440 (24 hours at 1 min intervals)");
