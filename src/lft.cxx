@@ -151,6 +151,11 @@ constexpr double get_max_spread_bps(bool crypto) {
   return crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
 }
 
+// Check if a file exists
+bool file_exists(std::string_view filename) {
+  return std::ifstream{filename.data()}.good();
+}
+
 void process_bar(
     const std::string &symbol, const lft::Bar &bar, std::size_t bar_index,
     lft::PriceHistory &history,
@@ -835,8 +840,6 @@ void log_order_entry(std::string_view symbol, std::string_view strategy,
                      double account_balance) {
 
   // Check if file exists to determine if we need to write header
-  auto file_exists = std::ifstream{orders_csv_filename.data()}.good();
-
   auto file = std::ofstream{orders_csv_filename.data(), std::ios::app};
   if (not file.is_open()) {
     std::println("{}⚠  Failed to write order log: {}{}", colour_yellow,
@@ -845,7 +848,7 @@ void log_order_entry(std::string_view symbol, std::string_view strategy,
   }
 
   // Write header if new file
-  if (not file_exists)
+  if (not file_exists(orders_csv_filename))
     file << orders_csv_header;
 
   // Defensive checks on input values
@@ -887,8 +890,6 @@ void log_exit(std::string_view symbol, std::string_view order_id,
               double peak_price, double account_balance) {
 
   // Check if file exists to determine if we need to write header
-  auto file_exists = std::ifstream{exits_csv_filename.data()}.good();
-
   auto file = std::ofstream{exits_csv_filename.data(), std::ios::app};
   if (not file.is_open()) {
     std::println("{}⚠  Failed to write exit log: {}{}", colour_yellow,
@@ -897,7 +898,7 @@ void log_exit(std::string_view symbol, std::string_view order_id,
   }
 
   // Write header if new file
-  if (not file_exists)
+  if (not file_exists(exits_csv_filename))
     file << exits_csv_header;
 
   // Write exit data
@@ -918,8 +919,6 @@ void log_blocked_trade(
     const std::chrono::system_clock::time_point &block_time) {
 
   // Check if file exists to determine if we need to write header
-  auto file_exists = std::ifstream{blocked_csv_filename.data()}.good();
-
   auto file = std::ofstream{blocked_csv_filename.data(), std::ios::app};
   if (not file.is_open()) {
     std::println("{}⚠  Failed to write blocked trade log: {}{}", colour_yellow,
@@ -928,7 +927,7 @@ void log_blocked_trade(
   }
 
   // Write header if new file
-  if (not file_exists)
+  if (not file_exists(blocked_csv_filename))
     file << blocked_csv_header;
 
   // Determine block reason
