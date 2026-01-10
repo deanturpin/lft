@@ -494,9 +494,19 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
                                    snap.latest_trade_timestamp);
 
   // Calculate bid-ask spread for trading viability assessment
-  auto spread_abs = snap.latest_quote_ask - snap.latest_quote_bid;
-  auto mid_price = (snap.latest_quote_bid + snap.latest_quote_ask) / 2.0;
-  auto spread_pct = mid_price > 0.0 ? (spread_abs / mid_price) * 100.0 : 0.0;
+  // Validate quote data before calculation
+  auto has_valid_quotes =
+      snap.latest_quote_bid > 0.0 and snap.latest_quote_ask > 0.0 and
+      snap.latest_quote_ask >= snap.latest_quote_bid;
+
+  auto spread_abs = 0.0;
+  auto spread_pct = 0.0;
+
+  if (has_valid_quotes) {
+    spread_abs = snap.latest_quote_ask - snap.latest_quote_bid;
+    auto mid_price = (snap.latest_quote_bid + snap.latest_quote_ask) / 2.0;
+    spread_pct = (spread_abs / mid_price) * 100.0;
+  }
 
   if (history.has_history) {
     if (history.change_percent > 0.0)
@@ -511,11 +521,15 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
       status = "🚨 ALERT";
   }
 
+  // Flag invalid quote data
+  if (not has_valid_quotes)
+    status += status.empty() ? "⚠️ NO QUOTES" : " ⚠️Q";
+
   // Assess trading viability based on spread
   // Wide spreads indicate poor liquidity and higher transaction costs
-  if (spread_pct > 2.0)
+  if (has_valid_quotes and spread_pct > 2.0)
     status += status.empty() ? "💸 WIDE SPREAD" : " 💸";
-  else if (spread_pct > 1.0)
+  else if (has_valid_quotes and spread_pct > 1.0)
     status += status.empty() ? "⚠️ HIGH SPREAD" : " ⚠️$";
 
   std::println("{}{:<10} {:>12.2f} {:>12.2f} {:>12.2f} {:>9.2f}% {:>7.3f}% {}{}",
