@@ -21,6 +21,7 @@
 #include "exit_logic_tests.h"
 
 using namespace std::chrono_literals;
+using namespace std::string_view_literals;
 using namespace lft; // Import constants from defs.h
 
 namespace {
@@ -34,6 +35,22 @@ constexpr auto colour_yellow = "\033[33m";
 
 // Dip threshold uses _pc literal from exit_logic_tests.h
 // constexpr auto dip_threshold = -2_pc;  // Disabled with dip strategy
+
+// Trading constants
+constexpr auto starting_capital = 100000.0;
+constexpr auto low_noise_threshold = 0.005;   // 0.5% noise
+constexpr auto high_noise_threshold = 0.015;  // 1.5% noise
+constexpr auto dst_start_month = 2;           // March (0-indexed)
+constexpr auto dst_end_month = 9;             // October (0-indexed)
+constexpr auto et_offset_dst = -4h;           // EDT (daylight saving)
+constexpr auto et_offset_std = -5h;           // EST (standard time)
+constexpr auto countdown_seconds = 10;
+
+// CSV file constants
+constexpr auto orders_csv_filename = "lft_orders.csv"sv;
+constexpr auto exits_csv_filename = "lft_exits.csv"sv;
+constexpr auto orders_csv_header = "timestamp,symbol,strategy,order_id,entry_price,quantity,notional,account_balance\n"sv;
+constexpr auto exits_csv_header = "timestamp,symbol,order_id,exit_price,exit_reason,peak_price,account_balance\n"sv;
 
 // Position tracking for backtest
 struct Position {
@@ -49,7 +66,7 @@ struct Position {
 
 struct BacktestStats {
   std::map<std::string, lft::StrategyStats> strategy_stats;
-  double cash{100000.0}; // Starting capital
+  double cash{starting_capital};
   std::map<std::string, Position> positions;
   int total_trades{};
   int winning_trades{};
@@ -163,8 +180,8 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
     // Noise regime detection: classify market conditions
     auto recent_noise = history.recent_noise(20);
     auto low_noise_regime =
-        recent_noise > 0.0 and recent_noise < 0.005; // <0.5% noise
-    auto high_noise_regime = recent_noise > 0.015;   // >1.5% noise
+        recent_noise > 0.0 and recent_noise < low_noise_threshold;
+    auto high_noise_regime = recent_noise > high_noise_threshold;
 
     // Evaluate entry strategies
     auto signals = std::vector<lft::StrategySignal>{
@@ -509,8 +526,8 @@ get_market_status(const std::chrono::system_clock::time_point &now) {
 
   // US Eastern Time offset (simplified DST: EST=UTC-5, EDT=UTC-4)
   auto month = utc_time->tm_mon;
-  auto is_dst = (month >= 2 and month <= 9); // Mar-Oct = EDT
-  auto et_offset = hours{is_dst ? -4 : -5};
+  auto is_dst = (month >= dst_start_month and month <= dst_end_month);
+  auto et_offset = is_dst ? et_offset_dst : et_offset_std;
 
   // Get current time in ET
   auto et_now = now + et_offset;
@@ -643,22 +660,19 @@ void log_order_entry(std::string_view symbol, std::string_view strategy,
                      const std::chrono::system_clock::time_point &entry_time,
                      double account_balance) {
 
-  auto filename = std::string{"lft_orders.csv"};
-
   // Check if file exists to determine if we need to write header
-  auto file_exists = std::ifstream{filename}.good();
+  auto file_exists = std::ifstream{orders_csv_filename.data()}.good();
 
-  auto file = std::ofstream{filename, std::ios::app};
+  auto file = std::ofstream{orders_csv_filename.data(), std::ios::app};
   if (not file.is_open()) {
     std::println("{}⚠  Failed to write order log: {}{}", colour_yellow,
-                 filename, colour_reset);
+                 orders_csv_filename.data(), colour_reset);
     return;
   }
 
   // Write header if new file
   if (not file_exists)
-    file << "timestamp,symbol,strategy,order_id,entry_price,quantity,notional,"
-            "account_balance\n";
+    file << orders_csv_header;
 
   // Write order entry data
   file << std::format("{:%Y-%m-%d %H:%M:%S},{},{},{},{:.4f},{:.6f},{:.2f},"
@@ -668,8 +682,8 @@ void log_order_entry(std::string_view symbol, std::string_view strategy,
 
   file.close();
 
-  std::println("{}📝 Order logged to: {}{}", colour_green, filename,
-               colour_reset);
+  std::println("{}📝 Order logged to: {}{}", colour_green,
+               orders_csv_filename.data(), colour_reset);
 }
 
 void log_exit(std::string_view symbol, std::string_view order_id,
@@ -677,22 +691,19 @@ void log_exit(std::string_view symbol, std::string_view order_id,
               const std::chrono::system_clock::time_point &exit_time,
               double peak_price, double account_balance) {
 
-  auto filename = std::string{"lft_exits.csv"};
-
   // Check if file exists to determine if we need to write header
-  auto file_exists = std::ifstream{filename}.good();
+  auto file_exists = std::ifstream{exits_csv_filename.data()}.good();
 
-  auto file = std::ofstream{filename, std::ios::app};
+  auto file = std::ofstream{exits_csv_filename.data(), std::ios::app};
   if (not file.is_open()) {
-    std::println("{}⚠  Failed to write exit log: {}{}", colour_yellow, filename,
-                 colour_reset);
+    std::println("{}⚠  Failed to write exit log: {}{}", colour_yellow,
+                 exits_csv_filename.data(), colour_reset);
     return;
   }
 
   // Write header if new file
   if (not file_exists)
-    file << "timestamp,symbol,order_id,exit_price,exit_reason,peak_price,"
-            "account_balance\n";
+    file << exits_csv_header;
 
   // Write exit data
   file << std::format("{:%Y-%m-%d %H:%M:%S},{},{},{:.4f},{},{:.4f},{:.2f}\n",
@@ -701,8 +712,8 @@ void log_exit(std::string_view symbol, std::string_view order_id,
 
   file.close();
 
-  std::println("{}📝 Exit logged to: {}{}", colour_green, filename,
-               colour_reset);
+  std::println("{}📝 Exit logged to: {}{}", colour_green,
+               exits_csv_filename.data(), colour_reset);
 }
 
 // Live trading loop
@@ -1019,16 +1030,15 @@ void run_live_trading(
             }
           } else {
             // Check if blocked by existing position
-            for (const auto &signal : signals) {
-              if (signal.should_buy and
-                  configs.contains(signal.strategy_name) and
-                  configs.at(signal.strategy_name).enabled) {
-                std::println(
-                    "{}⏸  BLOCKED: {} signal for {} (position already open){}",
-                    colour_yellow, signal.strategy_name, symbol, colour_reset);
-                break;
-              }
-            }
+            auto it = std::ranges::find_if(signals, [&](const auto &signal) {
+              return signal.should_buy and
+                     configs.contains(signal.strategy_name) and
+                     configs.at(signal.strategy_name).enabled;
+            });
+            if (it != signals.end())
+              std::println(
+                  "{}⏸  BLOCKED: {} signal for {} (position already open){}",
+                  colour_yellow, it->strategy_name, symbol, colour_reset);
           }
         }
       }
@@ -1169,16 +1179,15 @@ void run_live_trading(
             }
           } else {
             // Check if blocked by existing position
-            for (const auto &signal : signals) {
-              if (signal.should_buy and
-                  configs.contains(signal.strategy_name) and
-                  configs.at(signal.strategy_name).enabled) {
-                std::println(
-                    "{}⏸  BLOCKED: {} signal for {} (position already open){}",
-                    colour_yellow, signal.strategy_name, symbol, colour_reset);
-                break;
-              }
-            }
+            auto it = std::ranges::find_if(signals, [&](const auto &signal) {
+              return signal.should_buy and
+                     configs.contains(signal.strategy_name) and
+                     configs.at(signal.strategy_name).enabled;
+            });
+            if (it != signals.end())
+              std::println(
+                  "{}⏸  BLOCKED: {} signal for {} (position already open){}",
+                  colour_yellow, it->strategy_name, symbol, colour_reset);
           }
         }
       }
@@ -1219,11 +1228,11 @@ int main() {
     std::println("{}⚠ No profitable strategies - will only manage exits{}\n",
                  colour_yellow, colour_reset);
 
-  // 10-second countdown before live trading starts
+  // Countdown before live trading starts
   std::println(
-      "\n{}⚠ STARTING LIVE TRADING IN 10 SECONDS - Press Ctrl+C to cancel{}",
-      colour_yellow, colour_reset);
-  for (auto i = 10; i > 0; --i) {
+      "\n{}⚠ STARTING LIVE TRADING IN {} SECONDS - Press Ctrl+C to cancel{}",
+      colour_yellow, countdown_seconds, colour_reset);
+  for (auto i = countdown_seconds; i > 0; --i) {
     std::println("{}...", i);
     std::this_thread::sleep_for(1s);
   }
