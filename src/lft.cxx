@@ -534,29 +534,62 @@ void print_account_stats(lft::AlpacaClient &client,
   auto buying_power =
       std::stod(account_json["buying_power"].get<std::string>());
   auto equity = std::stod(account_json["equity"].get<std::string>());
-  auto portfolio_value =
-      std::stod(account_json["portfolio_value"].get<std::string>());
+  auto daytrading_buying_power =
+      std::stod(account_json["daytrading_buying_power"].get<std::string>());
+  auto long_market_value =
+      std::stod(account_json["long_market_value"].get<std::string>());
+  auto is_pdt = account_json["pattern_day_trader"].get<bool>();
+  auto daytrade_count = account_json["daytrade_count"].get<int>();
+  auto trading_blocked = account_json["trading_blocked"].get<bool>();
 
   std::println("\n💰 ACCOUNT STATUS");
   std::println("{:-<70}", "");
-  std::println("Cash:          ${:>12.2f}", cash);
-  std::println("Equity:        ${:>12.2f}", equity);
-  std::println("Portfolio:     ${:>12.2f}", portfolio_value);
-  std::println("Buying Power:  ${:>12.2f}", buying_power);
+  std::println("Cash:              ${:>12.2f}", cash);
+  std::println("Equity:            ${:>12.2f}", equity);
+  std::println("Long Positions:    ${:>12.2f}", long_market_value);
+  std::println("Buying Power:      ${:>12.2f}", buying_power);
+
+  // Day trading buying power with warning
+  if (daytrading_buying_power <= 0.0) {
+    std::println("{}Day Trade BP:      ${:>12.2f}  ⚠️  EXHAUSTED{}",
+                 colour_red, daytrading_buying_power, colour_reset);
+  } else if (daytrading_buying_power < notional_amount) {
+    std::println("{}Day Trade BP:      ${:>12.2f}  ⚠️  LOW{}",
+                 colour_yellow, daytrading_buying_power, colour_reset);
+  } else {
+    std::println("Day Trade BP:      ${:>12.2f}", daytrading_buying_power);
+  }
+
+  // Pattern day trader status with day trade count
+  auto pdt_colour = is_pdt ? colour_yellow : colour_reset;
+  std::println("{}Pattern Day Trader: {} ({}/3 day trades used){}",
+               pdt_colour, is_pdt ? "YES" : "NO", daytrade_count,
+               colour_reset);
+
+  // Trading status
+  auto status_text = trading_blocked ? "BLOCKED" : "ACTIVE";
+  auto status_icon = trading_blocked ? "❌" : "✅";
+  auto trading_colour = trading_blocked ? colour_red : colour_green;
+  std::println("{}Trading Status:     {} {}{}",
+               trading_colour, status_text, status_icon, colour_reset);
 
   // Market status
   auto market_status = get_market_status(now);
-  auto status_colour = market_status.is_open ? colour_green : colour_red;
-  std::println("{}{}{}", status_colour, market_status.message, colour_reset);
+  auto market_colour = market_status.is_open ? colour_green : colour_red;
+  std::println("{}{}{}", market_colour, market_status.message, colour_reset);
 
-  // Warn if low balance
+  // Warnings
+  if (trading_blocked) {
+    std::println("{}❌ CRITICAL: Trading blocked - cannot place orders{}",
+                 colour_red, colour_reset);
+  }
+  if (daytrading_buying_power <= 0.0) {
+    std::println("{}⚠  WARNING: No day trading buying power - new positions may be rejected{}",
+                 colour_yellow, colour_reset);
+  }
   if (cash < notional_amount) {
     std::println("{}⚠  WARNING: Cash (${:.2f}) below trade size (${:.2f}){}",
                  colour_yellow, cash, notional_amount, colour_reset);
-  }
-  if (cash <= 0.0) {
-    std::println("{}❌ CRITICAL: Zero balance - cannot place new trades{}",
-                 colour_red, colour_reset);
   }
 }
 
@@ -694,24 +727,10 @@ void run_live_trading(
           nlohmann::json::parse(positions_result.value(), nullptr, false);
 
       if (not positions_json.is_discarded()) {
-        // DEBUG: Log what API returned
-        std::println("{}🔍 DEBUG: API returned {} positions{}", colour_yellow,
-                     positions_json.size(), colour_reset);
-
         // Extract symbol names from API positions (API is source of truth)
         api_positions.clear();
-        for (const auto &pos : positions_json) {
-          auto sym = pos["symbol"].get<std::string>();
-          api_positions.insert(sym);
-          std::println("{}  API position: {}{}", colour_yellow, sym, colour_reset);
-        }
-
-        // DEBUG: Show tracked positions
-        std::println("{}🔍 DEBUG: Tracking {} positions{}", colour_yellow,
-                     api_positions.size(), colour_reset);
-        for (const auto &sym : api_positions) {
-          std::println("{}  Tracked: {}{}", colour_yellow, sym, colour_reset);
-        }
+        for (const auto &pos : positions_json)
+          api_positions.insert(pos["symbol"].get<std::string>());
 
         if (not positions_json.empty()) {
           std::println("\n📊 OPEN POSITIONS");
@@ -871,8 +890,6 @@ void run_live_trading(
           }
 
           if (not api_positions.contains(symbol)) {
-            std::println("{}🔍 DEBUG: {} not in api_positions - checking signals{}",
-                         colour_yellow, symbol, colour_reset);
             // Execute first enabled signal
             for (const auto &signal : signals) {
               if (signal.should_buy and
@@ -943,7 +960,13 @@ void run_live_trading(
                     ++strategy_stats[signal.strategy_name].trades_executed;
                   }
                 } else {
-                  std::println("❌ Order failed");
+                  // Order failed - explain why and continue
+                  std::println("{}❌ Order failed for {}: {}{}",
+                               colour_red, symbol,
+                               "likely insufficient buying power or non-marginable security",
+                               colour_reset);
+                  std::println("{}   Continuing with other symbols...{}",
+                               colour_yellow, colour_reset);
                 }
 
                 break; // One strategy per symbol
@@ -993,8 +1016,6 @@ void run_live_trading(
           }
 
           if (not api_positions.contains(symbol)) {
-            std::println("{}🔍 DEBUG: {} not in api_positions - checking signals{}",
-                         colour_yellow, symbol, colour_reset);
             // Execute first enabled signal
             for (const auto &signal : signals) {
               if (signal.should_buy and
@@ -1065,7 +1086,13 @@ void run_live_trading(
                     ++strategy_stats[signal.strategy_name].trades_executed;
                   }
                 } else {
-                  std::println("❌ Order failed");
+                  // Order failed - explain why and continue
+                  std::println("{}❌ Order failed for {}: {}{}",
+                               colour_red, symbol,
+                               "likely insufficient buying power or non-marginable security",
+                               colour_reset);
+                  std::println("{}   Continuing with other symbols...{}",
+                               colour_yellow, colour_reset);
                 }
 
                 break; // One strategy per symbol
