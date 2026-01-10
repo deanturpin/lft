@@ -22,9 +22,10 @@ struct StrategySignal {
 struct StrategyConfig {
     std::string name;
     bool enabled{false};
-    int trades_closed{};  // From calibration
-    double net_profit{};  // From calibration
-    double win_rate{};    // From calibration
+    int trades_closed{};        // From calibration
+    double net_profit{};        // From calibration
+    double win_rate{};          // From calibration
+    double expected_move_bps{}; // Average forward return after signal (from calibration)
 };
 
 // Performance tracking for each strategy
@@ -38,12 +39,30 @@ struct StrategyStats {
     double total_profit{};
     double total_loss{};
 
+    // Forward return tracking (for expected move calculation)
+    double total_forward_returns_bps{}; // Sum of forward returns from all signals
+    int forward_return_samples{};       // Number of signals measured
+    double total_win_bps{};             // Sum of winning trade sizes
+    double total_loss_bps{};            // Sum of losing trade sizes (negative)
+
     double win_rate() const {
         return trades_closed > 0 ? (static_cast<double>(profitable_trades) / trades_closed) * 100.0 : 0.0;
     }
 
     double net_profit() const {
         return total_profit + total_loss;
+    }
+
+    double avg_forward_return_bps() const {
+        return forward_return_samples > 0 ? total_forward_returns_bps / forward_return_samples : 0.0;
+    }
+
+    double avg_win_bps() const {
+        return profitable_trades > 0 ? total_win_bps / profitable_trades : 0.0;
+    }
+
+    double avg_loss_bps() const {
+        return losing_trades > 0 ? total_loss_bps / losing_trades : 0.0;
     }
 };
 

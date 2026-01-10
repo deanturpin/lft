@@ -117,7 +117,8 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
                  std::size_t bar_index, lft::PriceHistory &history,
                  const std::map<std::string, lft::PriceHistory> &all_histories,
                  BacktestStats &stats,
-                 const std::map<std::string, lft::StrategyConfig> &configs) {
+                 const std::map<std::string, lft::StrategyConfig> &configs,
+                 const std::map<std::string, std::vector<lft::Bar>> &symbol_bars) {
 
   // Filter out extended hours for stocks (keep crypto 24/7)
   auto is_crypto = symbol.find('/') != std::string::npos;
@@ -223,6 +224,25 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
       if (signal.should_buy) {
         ++stats.strategy_stats[signal.strategy_name].signals_generated;
 
+        // Measure forward return for this signal (look 10 bars ahead)
+        if (symbol_bars.contains(symbol)) {
+          const auto &bars = symbol_bars.at(symbol);
+          constexpr auto forward_horizon = 10uz; // 10-bar forward return
+          auto future_index = bar_index + forward_horizon;
+
+          if (future_index < bars.size()) {
+            auto current_price = bar.close;
+            auto future_price = bars[future_index].close;
+            auto forward_return_pct = (future_price - current_price) / current_price;
+            auto forward_return_bps = forward_return_pct * 10000.0; // Convert to bps
+
+            // Track forward returns
+            auto &strat_stats = stats.strategy_stats[signal.strategy_name];
+            strat_stats.total_forward_returns_bps += forward_return_bps;
+            ++strat_stats.forward_return_samples;
+          }
+        }
+
         // Filter low-confidence signals (reject if confidence <0.7)
         constexpr auto min_confidence = 0.7;
         if (signal.confidence < min_confidence)
@@ -293,7 +313,8 @@ BacktestStats run_backtest_with_data(
       const auto &bar = bars[i];
       auto &history = price_histories[symbol];
 
-      process_bar(symbol, bar, i, history, price_histories, stats, configs);
+      process_bar(symbol, bar, i, history, price_histories, stats, configs,
+                  symbol_bars);
     }
   }
 
@@ -361,18 +382,22 @@ lft::StrategyConfig calibrate_strategy(
   auto trades = stats.strategy_stats[strategy_name].trades_closed;
   auto signals = stats.strategy_stats[strategy_name].signals_generated;
   auto win_rate = stats.strategy_stats[strategy_name].win_rate();
+  auto expected_move = stats.strategy_stats[strategy_name].avg_forward_return_bps();
 
   auto config = configs[strategy_name];
   config.trades_closed = trades;
   config.net_profit = profit;
   config.win_rate = win_rate;
+  config.expected_move_bps = expected_move;
 
   {
     auto lock = std::scoped_lock{calibration_print_mutex};
     auto colour = profit > 0.0 ? colour_green : colour_red;
     std::println(
-        "{}✓ {} Complete: {} signals, {} trades, ${:.2f} P&L, {:.1f}% WR{}",
-        colour, strategy_name, signals, trades, profit, win_rate, colour_reset);
+        "{}✓ {} Complete: {} signals, {} trades, ${:.2f} P&L, {:.1f}% WR, "
+        "{:.1f} bps avg move{}",
+        colour, strategy_name, signals, trades, profit, win_rate, expected_move,
+        colour_reset);
   }
 
   return config;
@@ -1052,10 +1077,13 @@ void run_live_trading(
                 auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
                 auto total_cost_bps = calculate_total_cost_bps(spread_bps);
 
-                // Use expected move from signal, or default to 2x costs if not set
-                auto expected_move_bps = signal.expected_move_bps > 0.0
-                                             ? signal.expected_move_bps
-                                             : total_cost_bps * 2.0;
+                // Use expected move from config (calibrated), or signal, or default
+                auto expected_move_bps = configs.at(signal.strategy_name).expected_move_bps;
+                if (expected_move_bps <= 0.0) {
+                  expected_move_bps = signal.expected_move_bps > 0.0
+                                          ? signal.expected_move_bps
+                                          : total_cost_bps * 2.0;
+                }
 
                 if (not has_positive_edge(expected_move_bps, total_cost_bps)) {
                   auto net_edge_bps = expected_move_bps - total_cost_bps;
@@ -1255,10 +1283,13 @@ void run_live_trading(
                 auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
                 auto total_cost_bps = calculate_total_cost_bps(spread_bps);
 
-                // Use expected move from signal, or default to 2x costs if not set
-                auto expected_move_bps = signal.expected_move_bps > 0.0
-                                             ? signal.expected_move_bps
-                                             : total_cost_bps * 2.0;
+                // Use expected move from config (calibrated), or signal, or default
+                auto expected_move_bps = configs.at(signal.strategy_name).expected_move_bps;
+                if (expected_move_bps <= 0.0) {
+                  expected_move_bps = signal.expected_move_bps > 0.0
+                                          ? signal.expected_move_bps
+                                          : total_cost_bps * 2.0;
+                }
 
                 if (not has_positive_edge(expected_move_bps, total_cost_bps)) {
                   auto net_edge_bps = expected_move_bps - total_cost_bps;
