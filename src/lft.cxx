@@ -131,6 +131,11 @@ sleep_until_bar_ready(const std::chrono::system_clock::time_point &now) {
   return seconds{seconds_to_wait};
 }
 
+// Check if symbol is a crypto pair (contains '/')
+constexpr bool is_crypto(std::string_view symbol) {
+  return symbol.find('/') != std::string_view::npos;
+}
+
 void process_bar(const std::string &symbol, const lft::Bar &bar,
                  std::size_t bar_index, lft::PriceHistory &history,
                  const std::map<std::string, lft::PriceHistory> &all_histories,
@@ -139,8 +144,8 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
                  const std::map<std::string, std::vector<lft::Bar>> &symbol_bars) {
 
   // Filter out extended hours for stocks (keep crypto 24/7)
-  auto is_crypto = symbol.find('/') != std::string::npos;
-  if (not is_crypto) {
+  auto crypto = is_crypto(symbol);
+  if (not crypto) {
     auto bar_time = parse_bar_timestamp(bar.timestamp);
     auto market_status = get_market_status(bar_time);
 
@@ -158,8 +163,8 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
     auto &pos = stats.positions[symbol];
 
     // Apply spread: sell at bid (mid - half spread)
-    auto is_crypto = symbol.find('/') != std::string::npos;
-    auto spread = is_crypto ? crypto_spread : stock_spread;
+    auto crypto = is_crypto(symbol);
+    auto spread = crypto ? crypto_spread : stock_spread;
     auto half_spread = bar.close * (spread / 2.0);
     auto sell_price = bar.close - half_spread;
 
@@ -279,8 +284,8 @@ void process_bar(const std::string &symbol, const lft::Bar &bar,
         if (stats.cash >= notional_amount) {
 
           // Apply spread: buy at ask (mid + half spread)
-          auto is_crypto = symbol.find('/') != std::string::npos;
-          auto spread = is_crypto ? crypto_spread : stock_spread;
+          auto crypto = is_crypto(symbol);
+          auto spread = crypto ? crypto_spread : stock_spread;
           auto half_spread = bar.close * (spread / 2.0);
           auto buy_price = bar.close + half_spread;
 
@@ -355,8 +360,8 @@ BacktestStats run_backtest_with_data(
       continue;
 
     // Apply spread when closing final positions
-    auto is_crypto = symbol.find('/') != std::string::npos;
-    auto spread = is_crypto ? crypto_spread : stock_spread;
+    auto crypto = is_crypto(symbol);
+    auto spread = crypto ? crypto_spread : stock_spread;
     auto final_mid = bars.back().close;
     auto half_spread = final_mid * (spread / 2.0);
     auto final_sell_price = final_mid - half_spread;
@@ -463,13 +468,13 @@ calibrate_all_strategies(lft::AlpacaClient &client,
   auto symbol_bars = std::map<std::string, std::vector<lft::Bar>>{};
 
   for (const auto &symbol : all_symbols) {
-    auto is_crypto = symbol.find('/') != std::string::npos;
-    auto bars = is_crypto ? client.get_crypto_bars(symbol, "1Min", start, end)
-                          : client.get_bars(symbol, "1Min", start, end);
+    auto crypto = is_crypto(symbol);
+    auto bars = crypto ? client.get_crypto_bars(symbol, "1Min", start, end)
+                       : client.get_bars(symbol, "1Min", start, end);
 
     if (bars) {
       symbol_bars[symbol] = std::move(*bars);
-      auto asset_type = is_crypto ? "Crypto" : "Stock";
+      auto asset_type = crypto ? "Crypto" : "Stock";
       std::println("{:<10} {:>15} {:>15}", symbol, symbol_bars[symbol].size(),
                    asset_type);
     }
@@ -552,7 +557,7 @@ void print_header() {
 
 void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
                     lft::PriceHistory &history) {
-  auto is_crypto = symbol.find('/') != std::string::npos;
+  auto crypto = is_crypto(symbol);
   auto status = std::string{};
   auto colour = colour_reset;
 
@@ -573,7 +578,7 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
     // Check for outliers first (extreme moves), then regular alerts
     if (is_outlier(history.change_percent))
       status = "⚠️ OUTLIER";
-    else if (is_alert(history.change_percent, is_crypto))
+    else if (is_alert(history.change_percent, crypto))
       status = "🚨 ALERT";
   }
 
@@ -1132,9 +1137,9 @@ void run_live_trading(
                   configs.at(signal.strategy_name).enabled) {
 
                 // Check trade eligibility (spread and volume filters)
-                auto is_crypto = symbol.find('/') != std::string::npos;
+                auto crypto = is_crypto(symbol);
                 auto max_spread =
-                    is_crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
+                    crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
 
                 if (not lft::Strategies::is_tradeable(snap, history, max_spread,
                                                       min_volume_ratio)) {
@@ -1333,9 +1338,9 @@ void run_live_trading(
                   configs.at(signal.strategy_name).enabled) {
 
                 // Check trade eligibility (spread and volume filters)
-                auto is_crypto = symbol.find('/') != std::string::npos;
+                auto crypto = is_crypto(symbol);
                 auto max_spread =
-                    is_crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
+                    crypto ? max_spread_bps_crypto : max_spread_bps_stocks;
 
                 if (not lft::Strategies::is_tradeable(snap, history, max_spread,
                                                       min_volume_ratio)) {
