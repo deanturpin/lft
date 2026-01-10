@@ -167,18 +167,11 @@ std::chrono::seconds
 sleep_until_bar_ready(const std::chrono::system_clock::time_point &now) {
   using namespace std::chrono;
 
-  // Get current time broken down
-  auto now_t = system_clock::to_time_t(now);
-  auto now_tm = *std::localtime(&now_t);
+  // Round up to next minute, then add 35 seconds
+  auto next_minute = ceil<minutes>(now);
+  auto target_time = next_minute + 35s;
 
-  // Calculate target: 35 seconds past the NEXT minute
-  auto current_second = now_tm.tm_sec;
-
-  // If we're before :35, target is :35 this minute, otherwise :35 next minute
-  auto seconds_to_wait =
-      current_second < 35 ? 35 - current_second : 60 - current_second + 35;
-
-  return seconds{seconds_to_wait};
+  return duration_cast<seconds>(target_time - now);
 }
 
 // Check if symbol is a crypto pair (contains '/')
