@@ -14,8 +14,11 @@ BASE_URL="${ALPACA_BASE_URL:-https://paper-api.alpaca.markets}"
 echo "🔄 Fetching all orders from Alpaca API..."
 echo ""
 
-# Fetch all orders
-response=$(curl -s -X GET "${BASE_URL}/v2/orders?status=all" \
+# Calculate date 7 days ago for filtering
+AFTER_DATE=$(date -u -v-7d '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date -u -d '7 days ago' '+%Y-%m-%dT%H:%M:%SZ')
+
+# Fetch all orders (limit=500 max, filter by last 7 days)
+response=$(curl -s -X GET "${BASE_URL}/v2/orders?status=all&limit=500&after=${AFTER_DATE}" \
     -H "APCA-API-KEY-ID: ${ALPACA_API_KEY}" \
     -H "APCA-API-SECRET-KEY: ${ALPACA_API_SECRET}")
 
