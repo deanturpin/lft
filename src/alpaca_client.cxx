@@ -262,9 +262,34 @@ std::expected<std::string, AlpacaError> AlpacaClient::get_open_orders() {
   return res->body;
 }
 
+std::expected<std::string, AlpacaError> AlpacaClient::get_all_orders() {
+  auto client = httplib::Client{base_url_};
+  client.set_connection_timeout(30); // Longer timeout for potentially large response
+
+  httplib::Headers headers = {{"APCA-API-KEY-ID", api_key_},
+                              {"APCA-API-SECRET-KEY", api_secret_}};
+
+  // Get all orders (limit=500 is max per request, status=all gets everything)
+  auto res = client.Get("/v2/orders?status=all&limit=500", headers);
+
+  if (not res)
+    return std::unexpected(AlpacaError::NetworkError);
+
+  if (res->status == 401)
+    return std::unexpected(AlpacaError::AuthError);
+
+  if (res->status != 200) {
+    std::println(stderr, "API error: status={}, body={}", res->status,
+                 res->body);
+    return std::unexpected(AlpacaError::UnknownError);
+  }
+
+  return res->body;
+}
+
 std::expected<std::string, AlpacaError>
 AlpacaClient::place_order(std::string_view symbol, std::string_view side,
-                          double notional) {
+                          double notional, std::string_view client_order_id) {
 
   auto client = httplib::Client{base_url_};
   client.set_connection_timeout(10);
@@ -283,6 +308,10 @@ AlpacaClient::place_order(std::string_view symbol, std::string_view side,
                     {"type", "market"},
                     {"time_in_force", time_in_force},
                     {"notional", notional}};
+
+  // Add client_order_id if provided
+  if (not client_order_id.empty())
+    order["client_order_id"] = client_order_id;
 
   auto res =
       client.Post("/v2/orders", headers, order.dump(), "application/json");
@@ -310,7 +339,7 @@ AlpacaClient::place_order(std::string_view symbol, std::string_view side,
 
 std::expected<std::string, AlpacaError>
 AlpacaClient::place_order_qty(std::string_view symbol, std::string_view side,
-                              double quantity) {
+                              double quantity, std::string_view client_order_id) {
 
   auto client = httplib::Client{base_url_};
   client.set_connection_timeout(10);
@@ -329,6 +358,10 @@ AlpacaClient::place_order_qty(std::string_view symbol, std::string_view side,
                     {"type", "market"},
                     {"time_in_force", time_in_force},
                     {"qty", quantity}};
+
+  // Add client_order_id if provided
+  if (not client_order_id.empty())
+    order["client_order_id"] = client_order_id;
 
   auto res =
       client.Post("/v2/orders", headers, order.dump(), "application/json");

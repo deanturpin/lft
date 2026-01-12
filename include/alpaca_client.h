@@ -70,11 +70,14 @@ public:
     // Get all open orders (pending, new, accepted, partially_filled)
     std::expected<std::string, AlpacaError> get_open_orders();
 
+    // Get all orders (open, closed, all statuses) for restart recovery
+    std::expected<std::string, AlpacaError> get_all_orders();
+
     // Place a market order by notional amount (dollar-based, for stocks)
-    std::expected<std::string, AlpacaError> place_order(std::string_view, std::string_view, double);
+    std::expected<std::string, AlpacaError> place_order(std::string_view, std::string_view, double, std::string_view = "");
 
     // Place a market order by quantity (for crypto to avoid notional/qty confusion)
-    std::expected<std::string, AlpacaError> place_order_qty(std::string_view, std::string_view, double);
+    std::expected<std::string, AlpacaError> place_order_qty(std::string_view, std::string_view, double, std::string_view = "");
 
     // Close a position by symbol
     std::expected<std::string, AlpacaError> close_position(std::string_view);

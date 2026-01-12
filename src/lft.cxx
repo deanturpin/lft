@@ -47,13 +47,7 @@ constexpr auto et_offset_dst = -4h;          // EDT (daylight saving)
 constexpr auto et_offset_std = -5h;          // EST (standard time)
 
 // CSV file constants
-constexpr auto orders_csv_filename = "lft_orders.csv"sv;
-constexpr auto exits_csv_filename = "lft_exits.csv"sv;
 constexpr auto blocked_csv_filename = "lft_blocked_trades.csv"sv;
-constexpr auto orders_csv_header =
-    "timestamp,symbol,strategy,order_id,expected_price,entry_price,slippage_abs,slippage_pct,spread_pct,quantity,notional,account_balance\n"sv;
-constexpr auto exits_csv_header =
-    "timestamp,symbol,order_id,exit_price,exit_reason,peak_price,account_balance\n"sv;
 constexpr auto blocked_csv_header =
     "timestamp,symbol,strategy,signal_reason,spread_bps,max_spread_bps,volume_ratio,min_volume_ratio,block_reason\n"sv;
 
@@ -79,6 +73,22 @@ struct MarketStatus {
   bool is_open{};
   std::string message;
 };
+
+// Encode trading parameters into client_order_id (max 48 chars)
+std::string encode_client_order_id(std::string_view strategy,
+                                    double take_profit_pct, double stop_loss_pct,
+                                    double trailing_stop_pct) {
+  // Format: "strategy|tp:2.0|sl:-5.0|ts:30.0"
+  return std::format("{}|tp:{:.1f}|sl:{:.1f}|ts:{:.1f}", strategy,
+                     take_profit_pct, stop_loss_pct, trailing_stop_pct);
+}
+
+// Decode client_order_id back to strategy name (ignore params for now)
+std::string decode_strategy(std::string_view client_order_id) {
+  if (auto pos = client_order_id.find('|'); pos != std::string_view::npos)
+    return std::string{client_order_id.substr(0, pos)};
+  return std::string{client_order_id}; // No params, just strategy name
+}
 
 // Check if US stock market is open and time until open/close
 MarketStatus
@@ -834,85 +844,6 @@ void print_account_stats(lft::AlpacaClient &client,
   }
 }
 
-void log_order_entry(std::string_view symbol, std::string_view strategy,
-                     std::string_view order_id, double expected_price,
-                     double entry_price, double spread_pct, double quantity,
-                     double notional,
-                     const std::chrono::system_clock::time_point &entry_time,
-                     double account_balance) {
-
-  // Check if file exists to determine if we need to write header
-  auto file = std::ofstream{orders_csv_filename.data(), std::ios::app};
-  if (not file.is_open()) {
-    std::println("{}⚠  Failed to write order log: {}{}", colour_yellow,
-                 orders_csv_filename.data(), colour_reset);
-    return;
-  }
-
-  // Write header if new file
-  if (not file_exists(orders_csv_filename))
-    file << orders_csv_header;
-
-  // Defensive checks on input values
-  assert(expected_price > 0.0 && "Expected price must be positive");
-  assert(entry_price > 0.0 && "Entry price must be positive");
-  assert(quantity > 0.0 && "Quantity must be positive");
-  assert(notional > 0.0 && "Notional must be positive");
-  assert(spread_pct >= 0.0 && spread_pct < 100.0 && "Spread % must be 0-100%");
-  assert(std::isfinite(expected_price) && "Expected price must be finite");
-  assert(std::isfinite(entry_price) && "Entry price must be finite");
-
-  // Calculate slippage
-  auto slippage_abs = entry_price - expected_price;
-  auto slippage_pct =
-      expected_price > 0.0 ? (slippage_abs / expected_price) * 100.0 : 0.0;
-
-  assert(std::isfinite(slippage_abs) && "Slippage must be finite");
-  assert(std::abs(slippage_pct) < 50.0 && "Slippage unreasonably large (>50%)");
-
-  // Write order entry data with slippage metrics
-  file << std::format(
-      "{:%Y-%m-%d %H:%M:%S},{},{},{},{:.4f},{:.4f},{:.4f},{:.3f}%,{:.3f}%,{:."
-      "6f},{:.2f},{:.2f}\n",
-      entry_time, symbol, strategy, order_id, expected_price, entry_price,
-      slippage_abs, slippage_pct, spread_pct, quantity, notional,
-      account_balance);
-
-  file.close();
-
-  // Log slippage info to console
-  auto slippage_colour = slippage_abs > 0.0 ? colour_red : colour_green;
-  std::println("{}📝 Order logged: slippage {}{:.4f} ({:.3f}%){}", colour_green,
-               slippage_colour, slippage_abs, slippage_pct, colour_reset);
-}
-
-void log_exit(std::string_view symbol, std::string_view order_id,
-              std::string_view exit_reason, double exit_price,
-              const std::chrono::system_clock::time_point &exit_time,
-              double peak_price, double account_balance) {
-
-  // Check if file exists to determine if we need to write header
-  auto file = std::ofstream{exits_csv_filename.data(), std::ios::app};
-  if (not file.is_open()) {
-    std::println("{}⚠  Failed to write exit log: {}{}", colour_yellow,
-                 exits_csv_filename.data(), colour_reset);
-    return;
-  }
-
-  // Write header if new file
-  if (not file_exists(exits_csv_filename))
-    file << exits_csv_header;
-
-  // Write exit data
-  file << std::format("{:%Y-%m-%d %H:%M:%S},{},{},{:.4f},{},{:.4f},{:.2f}\n",
-                      exit_time, symbol, order_id, exit_price, exit_reason,
-                      peak_price, account_balance);
-
-  file.close();
-
-  std::println("{}📝 Exit logged to: {}{}", colour_green,
-               exits_csv_filename.data(), colour_reset);
-}
 
 void log_blocked_trade(
     std::string_view symbol, std::string_view strategy,
@@ -975,6 +906,61 @@ void run_live_trading(
   // Initialise stats for ALL strategies (enabled and disabled)
   for (const auto &[name, config] : configs)
     strategy_stats[name] = lft::StrategyStats{name};
+
+  // Startup: recover open positions from order history
+  std::println("\n{}🔄 Recovering positions from API...{}", colour_cyan, colour_reset);
+  auto all_orders_result = client.get_all_orders();
+  if (all_orders_result) {
+    auto orders_json =
+        nlohmann::json::parse(all_orders_result.value(), nullptr, false);
+
+    if (not orders_json.is_discarded() and orders_json.is_array()) {
+      // Recover open positions from order history
+      auto positions_result = client.get_positions();
+      if (positions_result) {
+        auto positions_json =
+            nlohmann::json::parse(positions_result.value(), nullptr, false);
+
+        if (not positions_json.is_discarded() and
+            positions_json.is_array() and not positions_json.empty()) {
+
+          std::println("\n   Recovering {} open positions...",
+                       positions_json.size());
+
+          // For each open position, find the order that created it
+          for (const auto &pos : positions_json) {
+            auto symbol = pos["symbol"].get<std::string>();
+
+            // Find most recent filled buy order for this symbol
+            for (const auto &order : orders_json) {
+              if (order["symbol"].get<std::string>() == symbol and
+                  order["status"].get<std::string>() == "filled" and
+                  order["side"].get<std::string>() == "buy") {
+
+                auto order_id = order["id"].get<std::string>();
+                auto client_order_id = order.value("client_order_id", "");
+
+                // Extract strategy from client_order_id (format:
+                // "strategy|tp:2.0|sl:-5.0|ts:30.0")
+                if (not client_order_id.empty()) {
+                  auto strategy = decode_strategy(client_order_id);
+                  position_strategies[symbol] = strategy;
+                  position_order_ids[symbol] = order_id;
+                  std::println("   ✓ {} ({})", symbol, client_order_id);
+                } else {
+                  position_strategies[symbol] = "unknown";
+                  position_order_ids[symbol] = order_id;
+                  std::println("   ⚠ {} (strategy unknown)", symbol);
+                }
+                break; // Found the order for this position
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  std::println("");
 
   for (auto cycle : std::views::iota(0, max_cycles)) {
     auto now = std::chrono::system_clock::now();
@@ -1120,29 +1106,6 @@ void run_live_trading(
               auto close_result = client.close_position(symbol);
               if (close_result) {
                 std::println("✅ Position closed: {}", symbol);
-
-                // Log the exit with full details
-                if (position_entry_times.contains(symbol)) {
-                  // Get current account balance
-                  auto account_balance = 0.0;
-                  auto account_result = client.get_account();
-                  if (account_result) {
-                    auto account_json = nlohmann::json::parse(
-                        account_result.value(), nullptr, false);
-                    if (not account_json.is_discarded() and
-                        account_json.contains("portfolio_value") and
-                        not account_json["portfolio_value"].is_null())
-                      account_balance = std::stod(
-                          account_json["portfolio_value"].get<std::string>());
-                  }
-
-                  // Log exit with order ID if we have it
-                  auto order_id = position_order_ids.contains(symbol)
-                                      ? position_order_ids[symbol]
-                                      : "unknown";
-                  log_exit(symbol, order_id, exit_reason, current_price, now,
-                           peak, account_balance);
-                }
 
                 if (strategy_stats.contains(strategy)) {
                   ++strategy_stats[strategy].trades_closed;
@@ -1322,7 +1285,12 @@ void run_live_trading(
                 std::println("   Buying ${:.0f} of {}...", notional_amount,
                              symbol);
 
-                auto order = client.place_order(symbol, "buy", notional_amount);
+                // Encode strategy and exit params in client_order_id
+                auto client_order_id =
+                    encode_client_order_id(signal.strategy_name, take_profit_pct,
+                                           stop_loss_pct, trailing_stop_pct);
+                auto order =
+                    client.place_order(symbol, "buy", notional_amount, client_order_id);
                 if (order) {
                   // Parse order response to verify status
                   auto order_json =
@@ -1345,47 +1313,6 @@ void run_live_trading(
                       position_order_ids[symbol] = order_id;
                       ++strategy_stats[signal.strategy_name].trades_executed;
 
-                      // Only log if filled (has valid entry price)
-                      if (status == "filled") {
-                        // Log order entry with account balance
-                        auto account_result = client.get_account();
-                        auto balance = 0.0;
-                        if (account_result) {
-                          auto account_json = nlohmann::json::parse(
-                              account_result.value(), nullptr, false);
-                          if (not account_json.is_discarded() and
-                              account_json.contains("equity") and
-                              not account_json["equity"].is_null())
-                            balance = std::stod(
-                                account_json["equity"].get<std::string>());
-                        }
-
-                        // Estimate filled price and quantity from order response
-                        auto filled_price =
-                            (order_json.contains("filled_avg_price") and
-                             not order_json["filled_avg_price"].is_null())
-                                ? std::stod(order_json["filled_avg_price"]
-                                                .get<std::string>())
-                                : 0.0;
-                        auto quantity_filled =
-                            (order_json.contains("filled_qty") and
-                             not order_json["filled_qty"].is_null())
-                                ? std::stod(
-                                      order_json["filled_qty"].get<std::string>())
-                                : (filled_price > 0 ? notional_amount / filled_price
-                                                    : 0.0);
-
-                        // Calculate expected price (ask for buy orders) and
-                        // spread
-                        auto expected_price = snap.latest_quote_ask;
-                        auto spread_pct = calculate_spread_pct(
-                            snap.latest_quote_bid, snap.latest_quote_ask);
-
-                        log_order_entry(symbol, signal.strategy_name, order_id,
-                                        expected_price, filled_price, spread_pct,
-                                        quantity_filled, notional_amount, now,
-                                        balance);
-                      }
                     } else {
                       std::println("{}⚠  Order status '{}' - may not execute{}",
                                    colour_yellow, status, colour_reset);
@@ -1395,6 +1322,8 @@ void run_live_trading(
                     position_strategies[symbol] = signal.strategy_name;
                     position_entry_times[symbol] = now;
                     ++strategy_stats[signal.strategy_name].trades_executed;
+
+                    // Can't log strategy assignment without order_id
                   }
                 } else {
                   // Order failed - explain why and continue
@@ -1539,7 +1468,12 @@ void run_live_trading(
                 std::println("   Buying ${:.0f} of {}...", notional_amount,
                              symbol);
 
-                auto order = client.place_order(symbol, "buy", notional_amount);
+                // Encode strategy and exit params in client_order_id
+                auto client_order_id =
+                    encode_client_order_id(signal.strategy_name, take_profit_pct,
+                                           stop_loss_pct, trailing_stop_pct);
+                auto order =
+                    client.place_order(symbol, "buy", notional_amount, client_order_id);
                 if (order) {
                   // Parse order response to verify status
                   auto order_json =
@@ -1562,48 +1496,6 @@ void run_live_trading(
                       position_order_ids[symbol] = order_id;
                       ++strategy_stats[signal.strategy_name].trades_executed;
 
-                      // Only log if filled (has valid entry price)
-                      if (status == "filled") {
-                        // Log order entry with account balance
-                        auto account_result = client.get_account();
-                        auto balance = 0.0;
-                        if (account_result) {
-                          auto account_json = nlohmann::json::parse(
-                              account_result.value(), nullptr, false);
-                          if (not account_json.is_discarded() and
-                              account_json.contains("equity") and
-                              not account_json["equity"].is_null())
-                            balance = std::stod(
-                                account_json["equity"].get<std::string>());
-                        }
-
-                        // Estimate filled price and quantity from order response
-                        auto filled_price =
-                            (order_json.contains("filled_avg_price") and
-                             not order_json["filled_avg_price"].is_null())
-                                ? std::stod(order_json["filled_avg_price"]
-                                                .get<std::string>())
-                                : 0.0;
-
-                        auto quantity_filled =
-                            (order_json.contains("filled_qty") and
-                             not order_json["filled_qty"].is_null())
-                                ? std::stod(
-                                      order_json["filled_qty"].get<std::string>())
-                                : (filled_price > 0 ? notional_amount / filled_price
-                                                    : 0.0);
-
-                        // Calculate expected price (ask for buy orders) and
-                        // spread
-                        auto expected_price = snap.latest_quote_ask;
-                        auto spread_pct = calculate_spread_pct(
-                            snap.latest_quote_bid, snap.latest_quote_ask);
-
-                        log_order_entry(symbol, signal.strategy_name, order_id,
-                                        expected_price, filled_price, spread_pct,
-                                        quantity_filled, notional_amount, now,
-                                        balance);
-                      }
                     } else {
                       std::println("{}⚠  Order status '{}' - may not execute{}",
                                    colour_yellow, status, colour_reset);
@@ -1613,6 +1505,8 @@ void run_live_trading(
                     position_strategies[symbol] = signal.strategy_name;
                     position_entry_times[symbol] = now;
                     ++strategy_stats[signal.strategy_name].trades_executed;
+
+                    // Can't log strategy assignment without order_id
                   }
                 } else {
                   // Order failed - explain why and continue
