@@ -624,7 +624,7 @@ constexpr double calculate_spread_pct(double bid, double ask) {
 
 void print_header() {
   std::println("\n{:<10} {:>12} {:>12} {:>12} {:>10} {:>8} {}", "SYMBOL",
-               "LAST", "BID", "ASK", "CHANGE%", "SPREAD%", "STATUS");
+               "LAST", "BID", "ASK", "CHANGE%", "BID-ASK%", "STATUS");
   std::println("{:-<80}", "");
 }
 
@@ -668,11 +668,18 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
   else if (valid_quotes and spread_pct > 1.0)
     status += status.empty() ? "⚠️ HIGH SPREAD" : " ⚠️$";
 
-  std::println(
-      "{}{:<10} {:>12.2f} {:>12.2f} {:>12.2f} {:>9.2f}% {:>7.3f}% {}{}", colour,
-      symbol, snap.latest_trade_price, snap.latest_quote_bid,
-      snap.latest_quote_ask, history.change_percent, spread_pct, status,
-      colour_reset);
+  // Format bid/ask/spread with --- for invalid quotes
+  if (valid_quotes)
+    std::println(
+        "{}{:<10} {:>12.2f} {:>12.2f} {:>12.2f} {:>9.2f}% {:>7.3f}% {}{}", colour,
+        symbol, snap.latest_trade_price, snap.latest_quote_bid,
+        snap.latest_quote_ask, history.change_percent, spread_pct, status,
+        colour_reset);
+  else
+    std::println(
+        "{}{:<10} {:>12.2f} {:>12} {:>12} {:>9.2f}% {:>8} {}{}", colour,
+        symbol, snap.latest_trade_price, "---", "---",
+        history.change_percent, "---", status, colour_reset);
 }
 
 // Calculate total estimated costs for a trade in basis points
