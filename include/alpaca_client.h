@@ -25,6 +25,7 @@ struct Snapshot {
     double latest_quote_ask{};
     double prev_daily_bar_close{};
     std::string latest_trade_timestamp;
+    long minute_bar_volume{};  // Volume from current minute bar
 };
 
 struct Bar {

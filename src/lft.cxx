@@ -45,7 +45,6 @@ constexpr auto dst_start_month = 2;          // March (0-indexed)
 constexpr auto dst_end_month = 9;            // October (0-indexed)
 constexpr auto et_offset_dst = -4h;          // EDT (daylight saving)
 constexpr auto et_offset_std = -5h;          // EST (standard time)
-constexpr auto countdown_seconds = 10;
 
 // CSV file constants
 constexpr auto orders_csv_filename = "lft_orders.csv"sv;
@@ -74,8 +73,6 @@ static_assert(dst_end_month >= 0 and dst_end_month <= 11,
               "DST end month must be 0-11 (Jan-Dec)");
 static_assert(dst_end_month > dst_start_month,
               "DST end month must be after start month");
-static_assert(countdown_seconds > 0 and countdown_seconds <= 60,
-              "Countdown should be 1-60 seconds");
 
 // Market status information
 struct MarketStatus {
@@ -638,6 +635,14 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
   history.add_price_with_timestamp(snap.latest_trade_price,
                                    snap.latest_trade_timestamp);
 
+  // Add volume from snapshot if available
+  if (snap.minute_bar_volume > 0) {
+    history.volumes.push_back(snap.minute_bar_volume);
+    // Keep synced with prices (max 100 data points)
+    if (history.volumes.size() > 100)
+      history.volumes.erase(history.volumes.begin());
+  }
+
   // Calculate bid-ask spread for trading viability assessment
   auto valid_quotes =
       has_valid_quotes(snap.latest_quote_bid, snap.latest_quote_ask);
@@ -761,8 +766,6 @@ void print_account_stats(lft::AlpacaClient &client,
       std::stod(account_json["daytrading_buying_power"].get<std::string>());
   auto long_market_value =
       std::stod(account_json["long_market_value"].get<std::string>());
-  auto is_pdt = account_json["pattern_day_trader"].get<bool>();
-  auto daytrade_count = account_json["daytrade_count"].get<int>();
   auto trading_blocked = account_json["trading_blocked"].get<bool>();
 
   std::println("\n💰 ACCOUNT STATUS");
@@ -782,11 +785,6 @@ void print_account_stats(lft::AlpacaClient &client,
   } else {
     std::println("Day Trade BP:      ${:>12.2f}", daytrading_buying_power);
   }
-
-  // Pattern day trader status with day trade count
-  auto pdt_colour = is_pdt ? colour_yellow : colour_reset;
-  std::println("{}Pattern Day Trader: {} ({}/3 day trades used){}", pdt_colour,
-               is_pdt ? "YES" : "NO", daytrade_count, colour_reset);
 
   // Trading status
   auto status_text = trading_blocked ? "BLOCKED" : "ACTIVE";
@@ -814,29 +812,6 @@ void print_account_stats(lft::AlpacaClient &client,
     std::println("{}⚠  WARNING: Cash (${:.2f}) below trade size (${:.2f}){}",
                  colour_yellow, cash, notional_amount, colour_reset);
   }
-}
-
-void print_strategy_stats(
-    const std::map<std::string, lft::StrategyStats> &stats) {
-  std::println("\n📊 STRATEGY PERFORMANCE");
-  std::println("{:-<110}", "");
-  std::println("{:<18} {:>10} {:>10} {:>10} {:>10} {:>12} {:>12} {:>12}",
-               "STRATEGY", "SIGNALS", "EXECUTED", "CLOSED", "WINS", "WIN RATE",
-               "NET P&L", "AVG P&L");
-  std::println("{:-<110}", "");
-
-  for (const auto &[name, stat] : stats) {
-    auto colour = stat.net_profit() >= 0.0 ? colour_green : colour_red;
-    auto avg_pl =
-        stat.trades_closed > 0 ? stat.net_profit() / stat.trades_closed : 0.0;
-
-    std::println(
-        "{}{:<18} {:>10} {:>10} {:>10} {:>10} {:>11.1f}% {:>11.2f} {:>11.2f}{}",
-        colour, stat.name, stat.signals_generated, stat.trades_executed,
-        stat.trades_closed, stat.profitable_trades, stat.win_rate(),
-        stat.net_profit(), avg_pl, colour_reset);
-  }
-  std::println("");
 }
 
 void log_order_entry(std::string_view symbol, std::string_view strategy,
@@ -1273,22 +1248,27 @@ void run_live_trading(
                       if (account_result) {
                         auto account_json = nlohmann::json::parse(
                             account_result.value(), nullptr, false);
-                        if (not account_json.is_discarded())
+                        if (not account_json.is_discarded() and
+                            account_json.contains("equity") and
+                            not account_json["equity"].is_null())
                           balance = std::stod(
                               account_json["equity"].get<std::string>());
                       }
 
                       // Estimate filled price and quantity from order response
                       auto filled_price =
-                          order_json.contains("filled_avg_price")
+                          (order_json.contains("filled_avg_price") and
+                           not order_json["filled_avg_price"].is_null())
                               ? std::stod(order_json["filled_avg_price"]
                                               .get<std::string>())
                               : 0.0;
                       auto quantity_filled =
-                          order_json.contains("filled_qty")
+                          (order_json.contains("filled_qty") and
+                           not order_json["filled_qty"].is_null())
                               ? std::stod(
                                     order_json["filled_qty"].get<std::string>())
-                              : notional_amount / filled_price;
+                              : (filled_price > 0 ? notional_amount / filled_price
+                                                  : 0.0);
 
                       // Calculate expected price (ask for buy orders) and
                       // spread
@@ -1479,7 +1459,9 @@ void run_live_trading(
                       if (account_result) {
                         auto account_json = nlohmann::json::parse(
                             account_result.value(), nullptr, false);
-                        if (not account_json.is_discarded())
+                        if (not account_json.is_discarded() and
+                            account_json.contains("equity") and
+                            not account_json["equity"].is_null())
                           balance = std::stod(
                               account_json["equity"].get<std::string>());
                       }
@@ -1547,9 +1529,6 @@ void run_live_trading(
       }
     }
 
-    // Print stats
-    print_strategy_stats(strategy_stats);
-
     // Sleep until :35 past next minute (after Alpaca's :30 bar recalculation)
     auto next_update = std::chrono::ceil<std::chrono::minutes>(now) + 35s;
     auto cycles_remaining = max_cycles - cycle;
@@ -1580,16 +1559,6 @@ int main() {
                            [](const auto &p) { return p.second.enabled; }))
     std::println("{}⚠ No profitable strategies - will only manage exits{}\n",
                  colour_yellow, colour_reset);
-
-  // Countdown before live trading starts
-  std::println(
-      "\n{}⚠ STARTING LIVE TRADING IN {} SECONDS - Press Ctrl+C to cancel{}",
-      colour_yellow, countdown_seconds, colour_reset);
-  for (auto i = countdown_seconds; i > 0; --i) {
-    std::println("{}...", i);
-    std::this_thread::sleep_for(1s);
-  }
-  std::println("{}🚀 GO!{}\n", colour_green, colour_reset);
 
   // Phase 2: Live trading (runs for 1 hour, then exits)
   run_live_trading(client, stocks, crypto, configs);

@@ -91,6 +91,10 @@ AlpacaClient::get_snapshots(const std::vector<std::string> &symbols) {
       if (data.contains("prevDailyBar") and not data["prevDailyBar"].is_null())
         snap.prev_daily_bar_close = data["prevDailyBar"]["c"];
 
+      // Extract volume from minute bar for volume filtering
+      if (data.contains("minuteBar") and not data["minuteBar"].is_null())
+        snap.minute_bar_volume = data["minuteBar"]["v"];
+
       snapshots[symbol] = snap;
     }
 
@@ -170,6 +174,10 @@ AlpacaClient::get_crypto_snapshots(const std::vector<std::string> &symbols) {
         if (data.contains("prevDailyBar") and
             not data["prevDailyBar"].is_null())
           snap.prev_daily_bar_close = data["prevDailyBar"]["c"];
+
+        // Extract volume from minute bar for volume filtering
+        if (data.contains("minuteBar") and not data["minuteBar"].is_null())
+          snap.minute_bar_volume = data["minuteBar"]["v"];
 
         snapshots[symbol] = snap;
       }
