@@ -1054,6 +1054,69 @@ void run_live_trading(
           }
           std::println("");
 
+          // Check if we're within 5 minutes of market close
+          auto now_t = std::chrono::system_clock::to_time_t(now);
+          auto utc_time = std::gmtime(&now_t);
+          auto month = utc_time->tm_mon;
+          auto is_dst = (month >= dst_start_month and month <= dst_end_month);
+          auto et_offset = is_dst ? et_offset_dst : et_offset_std;
+          auto et_now = now + et_offset;
+          auto et_time_t = std::chrono::system_clock::to_time_t(et_now);
+          auto et_tm = std::gmtime(&et_time_t);
+          auto current_time = std::chrono::hours{et_tm->tm_hour} + std::chrono::minutes{et_tm->tm_min};
+          constexpr auto market_close = std::chrono::hours{16}; // 4:00 PM ET
+          constexpr auto eod_close_time = market_close - std::chrono::minutes{5}; // Close all at 3:55 PM ET
+
+          auto force_eod_close = current_time >= eod_close_time and current_time < market_close;
+
+          if (force_eod_close) {
+            std::println("\n{}⏰ END OF DAY: Closing all positions (market closes in 5 minutes){}",
+                         colour_yellow, colour_reset);
+
+            for (const auto &pos : positions_json) {
+              auto symbol = pos["symbol"].get<std::string>();
+              auto unrealized_pl = std::stod(pos["unrealized_pl"].get<std::string>());
+              auto cost_basis = std::stod(pos["cost_basis"].get<std::string>());
+              auto profit_percent = (unrealized_pl / cost_basis) * 100.0;
+
+              // Skip crypto - trades 24/7
+              if (is_crypto(symbol)) {
+                std::println("   Skipping {} (crypto trades 24/7)", symbol);
+                continue;
+              }
+
+              std::println("   Closing {}: ${:.2f} ({:.2f}%)",
+                           symbol, unrealized_pl, profit_percent);
+
+              auto close_result = client.close_position(symbol);
+              if (close_result) {
+                std::println("   ✅ {} closed", symbol);
+
+                auto strategy = position_strategies.contains(symbol)
+                                    ? position_strategies[symbol]
+                                    : std::string{"unknown"};
+
+                if (strategy_stats.contains(strategy)) {
+                  ++strategy_stats[strategy].trades_closed;
+                  if (unrealized_pl > 0.0) {
+                    ++strategy_stats[strategy].profitable_trades;
+                    strategy_stats[strategy].total_profit += unrealized_pl;
+                  } else {
+                    ++strategy_stats[strategy].losing_trades;
+                    strategy_stats[strategy].total_loss += unrealized_pl;
+                  }
+                }
+
+                position_strategies.erase(symbol);
+                position_peaks.erase(symbol);
+                position_entry_times.erase(symbol);
+              } else {
+                std::println("   ❌ Failed to close {}", symbol);
+              }
+            }
+            std::println("");
+          }
+
           // Evaluate exits using strategy-specific parameters
           for (const auto &pos : positions_json) {
             auto symbol = pos["symbol"].get<std::string>();
