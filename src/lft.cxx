@@ -982,14 +982,17 @@ void run_live_trading(
     // Market hours: 9:30 AM - 4:00 PM ET
     constexpr auto market_open = std::chrono::hours{9} + std::chrono::minutes{30};
     constexpr auto market_close = std::chrono::hours{16}; // 4:00 PM ET
+    constexpr auto last_trade_time = market_close - std::chrono::minutes{2}; // Stop new trades at 3:58 PM ET
     constexpr auto eod_close_time = market_close - std::chrono::minutes{5}; // Close all at 3:55 PM ET
 
-    auto is_market_hours = current_time >= market_open and current_time < market_close;
+    auto is_market_hours = current_time >= market_open and current_time < last_trade_time;
     auto force_eod_close = current_time >= eod_close_time and current_time < market_close;
 
     // Show market hours status
-    if (not is_market_hours)
+    if (current_time < market_open or current_time >= market_close)
       std::println("{}⏸️  OUTSIDE MARKET HOURS (9:30 AM - 4:00 PM ET) - No new trades{}\n", colour_yellow, colour_reset);
+    else if (current_time >= last_trade_time and current_time < market_close)
+      std::println("{}⏸️  NEAR MARKET CLOSE (last trades at 3:58 PM ET) - Winding down{}\n", colour_yellow, colour_reset);
 
     // Display account status
     print_account_stats(client, now);
