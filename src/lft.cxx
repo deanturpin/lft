@@ -968,6 +968,29 @@ void run_live_trading(
     std::println("Tick at {:%Y-%m-%d %H:%M:%S}", now);
     std::println("{:-<70}", "");
 
+    // Calculate current ET time for market hours checks
+    auto now_t = std::chrono::system_clock::to_time_t(now);
+    auto utc_time = std::gmtime(&now_t);
+    auto month = utc_time->tm_mon;
+    auto is_dst = (month >= dst_start_month and month <= dst_end_month);
+    auto et_offset = is_dst ? et_offset_dst : et_offset_std;
+    auto et_now = now + et_offset;
+    auto et_time_t = std::chrono::system_clock::to_time_t(et_now);
+    auto et_tm = std::gmtime(&et_time_t);
+    auto current_time = std::chrono::hours{et_tm->tm_hour} + std::chrono::minutes{et_tm->tm_min};
+
+    // Market hours: 9:30 AM - 4:00 PM ET
+    constexpr auto market_open = std::chrono::hours{9} + std::chrono::minutes{30};
+    constexpr auto market_close = std::chrono::hours{16}; // 4:00 PM ET
+    constexpr auto eod_close_time = market_close - std::chrono::minutes{5}; // Close all at 3:55 PM ET
+
+    auto is_market_hours = current_time >= market_open and current_time < market_close;
+    auto force_eod_close = current_time >= eod_close_time and current_time < market_close;
+
+    // Show market hours status
+    if (not is_market_hours)
+      std::println("{}⏸️  OUTSIDE MARKET HOURS (9:30 AM - 4:00 PM ET) - No new trades{}\n", colour_yellow, colour_reset);
+
     // Display account status
     print_account_stats(client, now);
 
@@ -1054,21 +1077,7 @@ void run_live_trading(
           }
           std::println("");
 
-          // Check if we're within 5 minutes of market close
-          auto now_t = std::chrono::system_clock::to_time_t(now);
-          auto utc_time = std::gmtime(&now_t);
-          auto month = utc_time->tm_mon;
-          auto is_dst = (month >= dst_start_month and month <= dst_end_month);
-          auto et_offset = is_dst ? et_offset_dst : et_offset_std;
-          auto et_now = now + et_offset;
-          auto et_time_t = std::chrono::system_clock::to_time_t(et_now);
-          auto et_tm = std::gmtime(&et_time_t);
-          auto current_time = std::chrono::hours{et_tm->tm_hour} + std::chrono::minutes{et_tm->tm_min};
-          constexpr auto market_close = std::chrono::hours{16}; // 4:00 PM ET
-          constexpr auto eod_close_time = market_close - std::chrono::minutes{5}; // Close all at 3:55 PM ET
-
-          auto force_eod_close = current_time >= eod_close_time and current_time < market_close;
-
+          // Check if we need to close all positions before market close
           if (force_eod_close) {
             std::println("\n{}⏰ END OF DAY: Closing all positions (market closes in 5 minutes){}",
                          colour_yellow, colour_reset);
@@ -1244,7 +1253,12 @@ void run_live_trading(
 
           print_snapshot(symbol, snap, history);
 
-          // Entry logic - only for enabled strategies
+          // Entry logic - only for enabled strategies and during market hours
+          if (not is_market_hours) {
+            // Skip all new trades outside market hours (9:30 AM - 4:00 PM ET)
+            continue;
+          }
+
           auto signals = std::vector<lft::StrategySignal>{
               // lft::Strategies::evaluate_dip(history, dip_threshold),  //
               // Disabled
@@ -1427,7 +1441,12 @@ void run_live_trading(
 
           print_snapshot(symbol, snap, history);
 
-          // Entry logic - only for enabled strategies
+          // Entry logic - only for enabled strategies and during market hours
+          if (not is_market_hours) {
+            // Skip all new trades outside market hours (9:30 AM - 4:00 PM ET)
+            continue;
+          }
+
           auto signals = std::vector<lft::StrategySignal>{
               // lft::Strategies::evaluate_dip(history, dip_threshold),  //
               // Disabled
