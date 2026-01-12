@@ -238,6 +238,30 @@ std::expected<std::string, AlpacaError> AlpacaClient::get_positions() {
   return res->body;
 }
 
+std::expected<std::string, AlpacaError> AlpacaClient::get_open_orders() {
+  auto client = httplib::Client{base_url_};
+  client.set_connection_timeout(10);
+
+  httplib::Headers headers = {{"APCA-API-KEY-ID", api_key_},
+                              {"APCA-API-SECRET-KEY", api_secret_}};
+
+  auto res = client.Get("/v2/orders?status=open", headers);
+
+  if (not res)
+    return std::unexpected(AlpacaError::NetworkError);
+
+  if (res->status == 401)
+    return std::unexpected(AlpacaError::AuthError);
+
+  if (res->status != 200) {
+    std::println(stderr, "API error: status={}, body={}", res->status,
+                 res->body);
+    return std::unexpected(AlpacaError::UnknownError);
+  }
+
+  return res->body;
+}
+
 std::expected<std::string, AlpacaError>
 AlpacaClient::place_order(std::string_view symbol, std::string_view side,
                           double notional) {

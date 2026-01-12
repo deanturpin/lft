@@ -67,6 +67,9 @@ public:
     // Get all open positions
     std::expected<std::string, AlpacaError> get_positions();
 
+    // Get all open orders (pending, new, accepted, partially_filled)
+    std::expected<std::string, AlpacaError> get_open_orders();
+
     // Place a market order by notional amount (dollar-based, for stocks)
     std::expected<std::string, AlpacaError> place_order(std::string_view, std::string_view, double);
 

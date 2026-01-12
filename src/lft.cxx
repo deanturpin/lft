@@ -758,15 +758,35 @@ void print_account_stats(lft::AlpacaClient &client,
   if (account_json.is_discarded())
     return;
 
-  auto cash = std::stod(account_json["cash"].get<std::string>());
+  // Extract account fields with null checks
+  auto cash = (account_json.contains("cash") and not account_json["cash"].is_null())
+                  ? std::stod(account_json["cash"].get<std::string>())
+                  : 0.0;
   auto buying_power =
-      std::stod(account_json["buying_power"].get<std::string>());
-  auto equity = std::stod(account_json["equity"].get<std::string>());
+      (account_json.contains("buying_power") and
+       not account_json["buying_power"].is_null())
+          ? std::stod(account_json["buying_power"].get<std::string>())
+          : 0.0;
+  auto equity =
+      (account_json.contains("equity") and not account_json["equity"].is_null())
+          ? std::stod(account_json["equity"].get<std::string>())
+          : 0.0;
   auto daytrading_buying_power =
-      std::stod(account_json["daytrading_buying_power"].get<std::string>());
+      (account_json.contains("daytrading_buying_power") and
+       not account_json["daytrading_buying_power"].is_null())
+          ? std::stod(
+                account_json["daytrading_buying_power"].get<std::string>())
+          : 0.0;
   auto long_market_value =
-      std::stod(account_json["long_market_value"].get<std::string>());
-  auto trading_blocked = account_json["trading_blocked"].get<bool>();
+      (account_json.contains("long_market_value") and
+       not account_json["long_market_value"].is_null())
+          ? std::stod(account_json["long_market_value"].get<std::string>())
+          : 0.0;
+  auto trading_blocked =
+      (account_json.contains("trading_blocked") and
+       not account_json["trading_blocked"].is_null())
+          ? account_json["trading_blocked"].get<bool>()
+          : false;
 
   std::println("\n💰 ACCOUNT STATUS");
   std::println("{:-<70}", "");
@@ -965,8 +985,12 @@ void run_live_trading(
     // Display account status
     print_account_stats(client, now);
 
-    // Fetch and process positions (API is source of truth)
+    // Fetch open positions and pending orders (API is source of truth)
     auto positions_result = client.get_positions();
+    auto orders_result = client.get_open_orders();
+
+    // Track symbols with open positions or pending orders
+    auto symbols_in_use = std::set<std::string>{};
 
     if (positions_result) {
       auto positions_json =
@@ -975,34 +999,72 @@ void run_live_trading(
       if (not positions_json.is_discarded()) {
         // Extract symbol names from API positions (API is source of truth)
         api_positions.clear();
-        for (const auto &pos : positions_json)
-          api_positions.insert(pos["symbol"].get<std::string>());
+        for (const auto &pos : positions_json) {
+          auto symbol = pos["symbol"].get<std::string>();
+          api_positions.insert(symbol);
+          symbols_in_use.insert(symbol);
+        }
 
         if (not positions_json.empty()) {
           std::println("\n📊 OPEN POSITIONS");
-          std::println("{:-<82}", "");
-          std::println("{:<10} {:>10} {:>15} {:>15} {:>15} {:>10}", "SYMBOL",
-                       "QTY", "ENTRY PRICE", "CURRENT PRICE", "MARKET VALUE",
-                       "P&L %");
-          std::println("{:-<82}", "");
+          std::println("{:-<130}", "");
+          std::println(
+              "{:<10} {:>18} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10}",
+              "SYMBOL", "QTY", "ENTRY", "CURRENT", "TARGET", "VALUE", "P&L",
+              "P&L %", "TGT %");
+          std::println("{:-<130}", "");
 
-          for (const auto &pos : positions_json) {
+          // Convert to vector and sort by P&L % (descending)
+          auto positions_vec = std::vector<nlohmann::json>{};
+          for (const auto &pos : positions_json)
+            positions_vec.push_back(pos);
+
+          std::ranges::sort(positions_vec, [](const auto &a, const auto &b) {
+            auto entry_a = std::stod(a["avg_entry_price"].template get<std::string>());
+            auto current_a = std::stod(a["current_price"].template get<std::string>());
+            auto plpc_a = ((current_a - entry_a) / entry_a) * 100.0;
+
+            auto entry_b = std::stod(b["avg_entry_price"].template get<std::string>());
+            auto current_b = std::stod(b["current_price"].template get<std::string>());
+            auto plpc_b = ((current_b - entry_b) / entry_b) * 100.0;
+
+            return plpc_a > plpc_b; // Descending order (best first)
+          });
+
+          for (const auto &pos : positions_vec) {
             auto symbol = pos["symbol"].get<std::string>();
             auto qty = pos["qty"].get<std::string>();
             auto avg_entry =
                 std::stod(pos["avg_entry_price"].get<std::string>());
             auto current = std::stod(pos["current_price"].get<std::string>());
-            auto market_value =
-                std::stod(pos["market_value"].get<std::string>());
-            auto unrealized_plpc =
-                std::stod(pos["unrealized_plpc"].get<std::string>()) * 100.0;
+            auto cost_basis = std::stod(pos["cost_basis"].get<std::string>());
+
+            // Calculate P&L ourselves from current price
+            auto unrealized_plpc = ((current - avg_entry) / avg_entry) * 100.0;
+            auto market_value = cost_basis * (1.0 + unrealized_plpc / 100.0);
+            auto unrealized_pl = market_value - cost_basis;
+
+            // Calculate target: use peak with trailing stop if profitable,
+            // otherwise 2% TP
+            auto target_price = avg_entry * 1.02;
+            if (position_peaks.contains(symbol)) {
+              auto peak = position_peaks[symbol];
+              auto trailing_target = peak * (1.0 - trailing_stop_pct);
+              if (trailing_target > target_price)
+                target_price = trailing_target;
+            }
+
+            // Calculate target percentage from entry
+            auto target_plpc = ((target_price - avg_entry) / avg_entry) * 100.0;
 
             auto colour = unrealized_plpc >= 0.0 ? colour_green : colour_red;
 
             std::println(
-                "{}{:<10} {:>10} {:>15.2f} {:>15.2f} {:>15.2f} {:>9.2f}%{}",
-                colour, symbol, qty, avg_entry, current, market_value,
-                unrealized_plpc, colour_reset);
+                "{}{:<10} {:>18} {:>10.2f} {:>10.2f} {:>10.2f} {:>10.2f} "
+                "{:>10.2f} {:>9.2f}% {:>9.2f}%{}",
+                colour, symbol, qty, avg_entry, current, target_price,
+                market_value, unrealized_pl, unrealized_plpc, target_plpc,
+                colour_reset);
           }
           std::println("");
 
@@ -1050,9 +1112,9 @@ void run_live_trading(
               else
                 exit_reason = "STOP LOSS";
 
-              std::println("{} {}: {} ${:.2f} ({:.2f}%) from {}",
+              std::println("{} {}: {} ${:.2f} ({:.2f}%)",
                            unrealized_pl > 0.0 ? "💰" : "🛑", exit_reason,
-                           symbol, unrealized_pl, profit_percent, strategy);
+                           symbol, unrealized_pl, profit_percent);
               std::println("   Closing position...");
 
               auto close_result = client.close_position(symbol);
@@ -1067,7 +1129,9 @@ void run_live_trading(
                   if (account_result) {
                     auto account_json = nlohmann::json::parse(
                         account_result.value(), nullptr, false);
-                    if (not account_json.is_discarded())
+                    if (not account_json.is_discarded() and
+                        account_json.contains("portfolio_value") and
+                        not account_json["portfolio_value"].is_null())
                       account_balance = std::stod(
                           account_json["portfolio_value"].get<std::string>());
                   }
@@ -1103,6 +1167,42 @@ void run_live_trading(
       }
     }
 
+    // Parse open orders and add their symbols to symbols_in_use
+    if (orders_result) {
+      auto orders_json =
+          nlohmann::json::parse(orders_result.value(), nullptr, false);
+
+      if (not orders_json.is_discarded() and orders_json.is_array()) {
+        for (const auto &order : orders_json) {
+          auto symbol = order["symbol"].get<std::string>();
+          symbols_in_use.insert(symbol);
+        }
+
+        if (not orders_json.empty()) {
+          std::println("\n⏳ PENDING ORDERS: {}", orders_json.size());
+          for (const auto &order : orders_json) {
+            auto symbol = order["symbol"].get<std::string>();
+            auto side = order["side"].get<std::string>();
+            auto status = order["status"].get<std::string>();
+            std::println("   {} {} ({})", symbol, side, status);
+          }
+        }
+      }
+    }
+
+    // Clean up position_strategies: remove entries that don't have actual positions
+    // This handles rejected/canceled orders that were initially accepted
+    for (auto it = position_strategies.begin(); it != position_strategies.end();) {
+      if (not api_positions.contains(it->first)) {
+        position_peaks.erase(it->first);
+        position_entry_times.erase(it->first);
+        position_order_ids.erase(it->first);
+        it = position_strategies.erase(it);
+      } else {
+        ++it;
+      }
+    }
+
     // Fetch market data
     auto stock_snapshots = client.get_snapshots(stocks);
     auto crypto_snapshots = client.get_crypto_snapshots(crypto);
@@ -1135,7 +1235,7 @@ void run_live_trading(
               ++strategy_stats[signal.strategy_name].signals_generated;
           }
 
-          if (not api_positions.contains(symbol)) {
+          if (not symbols_in_use.contains(symbol)) {
             // Execute first enabled signal
             for (const auto &signal : signals) {
               if (signal.should_buy and
@@ -1155,9 +1255,12 @@ void run_live_trading(
                   std::println("{}⛔ TRADE BLOCKED: {}{}", colour_yellow,
                                symbol, colour_reset);
                   std::println("   Spread: {:.1f} bps (max {:.1f}), Volume: "
-                               "{:.1f}x avg (min {:.1f}x)",
+                               "{:.3f}x avg (min {:.1f}x)",
                                spread_bps, max_spread, vol_ratio,
                                min_volume_ratio);
+                  std::println("   Quotes: bid={:.2f}, ask={:.2f}, mid={:.2f}",
+                               snap.latest_quote_bid, snap.latest_quote_ask,
+                               (snap.latest_quote_bid + snap.latest_quote_ask) / 2.0);
                   std::println("   Signal: {} - {}", signal.strategy_name,
                                signal.reason);
 
@@ -1242,44 +1345,47 @@ void run_live_trading(
                       position_order_ids[symbol] = order_id;
                       ++strategy_stats[signal.strategy_name].trades_executed;
 
-                      // Log order entry with account balance
-                      auto account_result = client.get_account();
-                      auto balance = 0.0;
-                      if (account_result) {
-                        auto account_json = nlohmann::json::parse(
-                            account_result.value(), nullptr, false);
-                        if (not account_json.is_discarded() and
-                            account_json.contains("equity") and
-                            not account_json["equity"].is_null())
-                          balance = std::stod(
-                              account_json["equity"].get<std::string>());
+                      // Only log if filled (has valid entry price)
+                      if (status == "filled") {
+                        // Log order entry with account balance
+                        auto account_result = client.get_account();
+                        auto balance = 0.0;
+                        if (account_result) {
+                          auto account_json = nlohmann::json::parse(
+                              account_result.value(), nullptr, false);
+                          if (not account_json.is_discarded() and
+                              account_json.contains("equity") and
+                              not account_json["equity"].is_null())
+                            balance = std::stod(
+                                account_json["equity"].get<std::string>());
+                        }
+
+                        // Estimate filled price and quantity from order response
+                        auto filled_price =
+                            (order_json.contains("filled_avg_price") and
+                             not order_json["filled_avg_price"].is_null())
+                                ? std::stod(order_json["filled_avg_price"]
+                                                .get<std::string>())
+                                : 0.0;
+                        auto quantity_filled =
+                            (order_json.contains("filled_qty") and
+                             not order_json["filled_qty"].is_null())
+                                ? std::stod(
+                                      order_json["filled_qty"].get<std::string>())
+                                : (filled_price > 0 ? notional_amount / filled_price
+                                                    : 0.0);
+
+                        // Calculate expected price (ask for buy orders) and
+                        // spread
+                        auto expected_price = snap.latest_quote_ask;
+                        auto spread_pct = calculate_spread_pct(
+                            snap.latest_quote_bid, snap.latest_quote_ask);
+
+                        log_order_entry(symbol, signal.strategy_name, order_id,
+                                        expected_price, filled_price, spread_pct,
+                                        quantity_filled, notional_amount, now,
+                                        balance);
                       }
-
-                      // Estimate filled price and quantity from order response
-                      auto filled_price =
-                          (order_json.contains("filled_avg_price") and
-                           not order_json["filled_avg_price"].is_null())
-                              ? std::stod(order_json["filled_avg_price"]
-                                              .get<std::string>())
-                              : 0.0;
-                      auto quantity_filled =
-                          (order_json.contains("filled_qty") and
-                           not order_json["filled_qty"].is_null())
-                              ? std::stod(
-                                    order_json["filled_qty"].get<std::string>())
-                              : (filled_price > 0 ? notional_amount / filled_price
-                                                  : 0.0);
-
-                      // Calculate expected price (ask for buy orders) and
-                      // spread
-                      auto expected_price = snap.latest_quote_ask;
-                      auto spread_pct = calculate_spread_pct(
-                          snap.latest_quote_bid, snap.latest_quote_ask);
-
-                      log_order_entry(symbol, signal.strategy_name, order_id,
-                                      expected_price, filled_price, spread_pct,
-                                      quantity_filled, notional_amount, now,
-                                      balance);
                     } else {
                       std::println("{}⚠  Order status '{}' - may not execute{}",
                                    colour_yellow, status, colour_reset);
@@ -1346,7 +1452,7 @@ void run_live_trading(
               ++strategy_stats[signal.strategy_name].signals_generated;
           }
 
-          if (not api_positions.contains(symbol)) {
+          if (not symbols_in_use.contains(symbol)) {
             // Execute first enabled signal
             for (const auto &signal : signals) {
               if (signal.should_buy and
@@ -1366,9 +1472,12 @@ void run_live_trading(
                   std::println("{}⛔ TRADE BLOCKED: {}{}", colour_yellow,
                                symbol, colour_reset);
                   std::println("   Spread: {:.1f} bps (max {:.1f}), Volume: "
-                               "{:.1f}x avg (min {:.1f}x)",
+                               "{:.3f}x avg (min {:.1f}x)",
                                spread_bps, max_spread, vol_ratio,
                                min_volume_ratio);
+                  std::println("   Quotes: bid={:.2f}, ask={:.2f}, mid={:.2f}",
+                               snap.latest_quote_bid, snap.latest_quote_ask,
+                               (snap.latest_quote_bid + snap.latest_quote_ask) / 2.0);
                   std::println("   Signal: {} - {}", signal.strategy_name,
                                signal.reason);
 
@@ -1453,42 +1562,48 @@ void run_live_trading(
                       position_order_ids[symbol] = order_id;
                       ++strategy_stats[signal.strategy_name].trades_executed;
 
-                      // Log order entry with account balance
-                      auto account_result = client.get_account();
-                      auto balance = 0.0;
-                      if (account_result) {
-                        auto account_json = nlohmann::json::parse(
-                            account_result.value(), nullptr, false);
-                        if (not account_json.is_discarded() and
-                            account_json.contains("equity") and
-                            not account_json["equity"].is_null())
-                          balance = std::stod(
-                              account_json["equity"].get<std::string>());
+                      // Only log if filled (has valid entry price)
+                      if (status == "filled") {
+                        // Log order entry with account balance
+                        auto account_result = client.get_account();
+                        auto balance = 0.0;
+                        if (account_result) {
+                          auto account_json = nlohmann::json::parse(
+                              account_result.value(), nullptr, false);
+                          if (not account_json.is_discarded() and
+                              account_json.contains("equity") and
+                              not account_json["equity"].is_null())
+                            balance = std::stod(
+                                account_json["equity"].get<std::string>());
+                        }
+
+                        // Estimate filled price and quantity from order response
+                        auto filled_price =
+                            (order_json.contains("filled_avg_price") and
+                             not order_json["filled_avg_price"].is_null())
+                                ? std::stod(order_json["filled_avg_price"]
+                                                .get<std::string>())
+                                : 0.0;
+
+                        auto quantity_filled =
+                            (order_json.contains("filled_qty") and
+                             not order_json["filled_qty"].is_null())
+                                ? std::stod(
+                                      order_json["filled_qty"].get<std::string>())
+                                : (filled_price > 0 ? notional_amount / filled_price
+                                                    : 0.0);
+
+                        // Calculate expected price (ask for buy orders) and
+                        // spread
+                        auto expected_price = snap.latest_quote_ask;
+                        auto spread_pct = calculate_spread_pct(
+                            snap.latest_quote_bid, snap.latest_quote_ask);
+
+                        log_order_entry(symbol, signal.strategy_name, order_id,
+                                        expected_price, filled_price, spread_pct,
+                                        quantity_filled, notional_amount, now,
+                                        balance);
                       }
-
-                      // Estimate filled price and quantity from order response
-                      auto filled_price =
-                          order_json.contains("filled_avg_price")
-                              ? std::stod(order_json["filled_avg_price"]
-                                              .get<std::string>())
-                              : 0.0;
-
-                      auto quantity_filled =
-                          order_json.contains("filled_qty")
-                              ? std::stod(
-                                    order_json["filled_qty"].get<std::string>())
-                              : notional_amount / filled_price;
-
-                      // Calculate expected price (ask for buy orders) and
-                      // spread
-                      auto expected_price = snap.latest_quote_ask;
-                      auto spread_pct = calculate_spread_pct(
-                          snap.latest_quote_bid, snap.latest_quote_ask);
-
-                      log_order_entry(symbol, signal.strategy_name, order_id,
-                                      expected_price, filled_price, spread_pct,
-                                      quantity_filled, notional_amount, now,
-                                      balance);
                     } else {
                       std::println("{}⚠  Order status '{}' - may not execute{}",
                                    colour_yellow, status, colour_reset);
