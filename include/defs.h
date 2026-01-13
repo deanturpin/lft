@@ -65,16 +65,19 @@ inline const auto stocks = std::vector<std::string>{
     "VNQ"  // Real estate
 };
 
+// TEMPORARILY DISABLED (2026-01-13): Triple AVAX positions detected
+// Need to investigate why duplicate order prevention isn't working for crypto
+// See BUGFIX_2026-01-13.md for details on the duplicate order bug
 inline const auto crypto = std::vector<std::string>{
-    // Major cryptocurrencies (Layer 1 blockchains)
-    "BTC/USD",  // Bitcoin - Original cryptocurrency, digital gold
-    "ETH/USD",  // Ethereum - Smart contracts, DeFi, NFTs
-    "SOL/USD",  // Solana - High-speed blockchain, low fees
-    "AVAX/USD", // Avalanche - Fast, scalable smart contracts
-    // Meme coins (high volatility)
-    "DOGE/USD", // Dogecoin - Original meme coin
-    // DeFi and infrastructure
-    "LINK/USD"  // Chainlink - Decentralised oracles for smart contracts
+    // DISABLED - Major cryptocurrencies (Layer 1 blockchains)
+    // "BTC/USD",  // Bitcoin - Original cryptocurrency, digital gold
+    // "ETH/USD",  // Ethereum - Smart contracts, DeFi, NFTs
+    // "SOL/USD",  // Solana - High-speed blockchain, low fees
+    // "AVAX/USD", // Avalanche - Fast, scalable smart contracts
+    // DISABLED - Meme coins (high volatility)
+    // "DOGE/USD", // Dogecoin - Original meme coin
+    // DISABLED - DeFi and infrastructure
+    // "LINK/USD"  // Chainlink - Decentralised oracles for smart contracts
 };
 
 // Timing parameters

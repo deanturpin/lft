@@ -1,3 +1,28 @@
+//
+// CRITICAL BUG FIXES (2026-01-13):
+//
+// Three related bugs fixed to prevent duplicate orders:
+//
+// 1. NON-UNIQUE client_order_id (Lines 77-93):
+//    - Bug: All orders for same strategy/params had identical client_order_id
+//    - Symptom: Alpaca rejected with "client_order_id must be unique" (error 40010001)
+//    - Fix: Include symbol + millisecond timestamp in client_order_id
+//    - Format: "TLT_momentum_1768317100944|tp:2.0|sl:-5.0|ts:30.0"
+//
+// 2. AGGRESSIVE CLEANUP LOOP (Lines 1280-1310):
+//    - Bug: Cleanup erased symbols from position_strategies if not in API response
+//    - Root cause: Unknown - API lag, race condition, or timing issue (under investigation)
+//    - Symptom: 3 simultaneous ETH/USD positions at 15:11:41, 15:12:39, 15:13:38
+//    - Fix: 5-minute grace period - don't erase recently entered symbols
+//
+// 3. MISSING DUPLICATE GUARDS (Lines 1331-1343, 1457, 1468):
+//    - Bug: Only checked symbols_in_use (from API), not persistent position_strategies
+//    - Fix: Two-layer check: symbols_in_use AND position_strategies
+//    - Also: Immediately add symbol to symbols_in_use after order placement
+//
+// See inline comments at each location for detailed explanations.
+//
+
 #include "alpaca_client.h"
 #include "defs.h"
 #include "strategies.h"
@@ -75,19 +100,45 @@ struct MarketStatus {
 };
 
 // Encode trading parameters into client_order_id (max 48 chars)
+// Includes symbol and timestamp to ensure uniqueness across orders
 std::string encode_client_order_id(std::string_view strategy,
+                                    std::string_view symbol,
                                     double take_profit_pct, double stop_loss_pct,
                                     double trailing_stop_pct) {
-  // Format: "strategy|tp:2.0|sl:-5.0|ts:30.0"
-  return std::format("{}|tp:{:.1f}|sl:{:.1f}|ts:{:.1f}", strategy,
-                     take_profit_pct, stop_loss_pct, trailing_stop_pct);
+  // Get timestamp in milliseconds since epoch
+  auto now = std::chrono::system_clock::now();
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      now.time_since_epoch()).count();
+
+  // Format: "SYM_strategy_ms" (symbol ensures uniqueness per ticker)
+  // Keep it under 48 chars: symbol(5) + strategy(10) + timestamp(13) + separators = ~30 chars
+  // Convert fractions to percentages for display (0.02 -> 2.0)
+  return std::format("{}_{}_{}|tp:{:.1f}|sl:{:.1f}|ts:{:.1f}",
+                     symbol, strategy, ms,
+                     take_profit_pct * 100.0, stop_loss_pct * 100.0, trailing_stop_pct * 100.0);
 }
 
-// Decode client_order_id back to strategy name (ignore params for now)
+// Decode client_order_id back to strategy name
+// Format: "SYM_strategy_timestamp|tp:2.0|sl:-5.0|ts:0.5"
 std::string decode_strategy(std::string_view client_order_id) {
-  if (auto pos = client_order_id.find('|'); pos != std::string_view::npos)
-    return std::string{client_order_id.substr(0, pos)};
-  return std::string{client_order_id}; // No params, just strategy name
+  // Find the pipe separator between ID and params
+  auto pipe_pos = client_order_id.find('|');
+  auto id_part = pipe_pos != std::string_view::npos
+                     ? client_order_id.substr(0, pipe_pos)
+                     : client_order_id;
+
+  // Extract strategy name from "SYM_strategy_timestamp"
+  // Find second underscore to skip "SYM_"
+  auto first_under = id_part.find('_');
+  if (first_under == std::string_view::npos)
+    return std::string{id_part}; // Fallback: return as-is
+
+  auto second_under = id_part.find('_', first_under + 1);
+  if (second_under == std::string_view::npos)
+    return std::string{id_part.substr(first_under + 1)}; // "strategy_timestamp"
+
+  // Return just the strategy name (between first and second underscore)
+  return std::string{id_part.substr(first_under + 1, second_under - first_under - 1)};
 }
 
 // Check if US stock market is open and time until open/close
@@ -1228,12 +1279,40 @@ void run_live_trading(
     }
 
     // Clean up position_strategies: remove entries that don't have actual positions
-    // This handles rejected/canceled orders that were initially accepted
+    // BUT keep recent entries to prevent duplicate orders during API lag
+    //
+    // CRITICAL BUG PREVENTION: Protection against duplicate orders due to API/timing issues.
+    // Observed behaviour: 3 ETH/USD orders placed 58-59 seconds apart created simultaneous positions.
+    // Root cause unknown - could be:
+    //   - Alpaca API lag in /v2/positions endpoint
+    //   - Race condition in our order/position tracking
+    //   - Network timing issues
+    //   - Something else we haven't identified yet
+    //
+    // During this lag window, if we erase from position_strategies, the symbol appears
+    // "available" and we place duplicate orders. This created 3 simultaneous ETH/USD
+    // positions on 2026-01-13 at 15:11:41, 15:12:39, and 15:13:38 (58-59 seconds apart).
+    //
+    // SOLUTION: Keep entries in position_strategies for 5 minutes after entry, regardless
+    // of API state. This prevents rapid duplicate orders while still cleaning up stale
+    // entries from rejected/canceled orders eventually.
+    //
+    // TODO: Consider these improvements:
+    //   - Increase to 30-60 minute window for stronger protection
+    //   - Persist position_strategies to disk (survive bot restarts)
+    //   - Add "max trades per symbol per session" hard limit
+    //   - Track all orders in SQLite database for audit trail
+    auto five_minutes_ago = now - std::chrono::minutes{5};
     for (auto it = position_strategies.begin(); it != position_strategies.end();) {
-      if (not api_positions.contains(it->first)) {
-        position_peaks.erase(it->first);
-        position_entry_times.erase(it->first);
-        position_order_ids.erase(it->first);
+      auto symbol = it->first;
+      auto recently_entered = position_entry_times.contains(symbol) and
+                             position_entry_times[symbol] > five_minutes_ago;
+
+      // Only erase if position doesn't exist AND wasn't recently entered
+      if (not api_positions.contains(symbol) and not recently_entered) {
+        position_peaks.erase(symbol);
+        position_entry_times.erase(symbol);
+        position_order_ids.erase(symbol);
         it = position_strategies.erase(it);
       } else {
         ++it;
@@ -1242,7 +1321,11 @@ void run_live_trading(
 
     // Fetch market data
     auto stock_snapshots = client.get_snapshots(stocks);
-    auto crypto_snapshots = client.get_crypto_snapshots(crypto);
+
+    // Only fetch crypto if we have any crypto symbols configured
+    auto crypto_snapshots = crypto.empty()
+        ? std::expected<std::map<std::string, lft::Snapshot>, lft::AlpacaError>{}
+        : client.get_crypto_snapshots(crypto);
 
     print_header();
 
@@ -1277,7 +1360,20 @@ void run_live_trading(
               ++strategy_stats[signal.strategy_name].signals_generated;
           }
 
-          if (not symbols_in_use.contains(symbol)) {
+          // DUPLICATE ORDER PREVENTION: Two-layer guard
+          //
+          // Layer 1: symbols_in_use (populated from API each cycle)
+          //   - Contains symbols from /v2/positions and /v2/orders?status=open
+          //   - Protects against placing orders when API shows active positions/orders
+          //
+          // Layer 2: position_strategies (persistent in-memory map)
+          //   - Contains symbols we've placed orders for in this session
+          //   - Protected by 5-minute cleanup grace period (see lines 1280-1310)
+          //   - Critical for handling whatever timing issue caused 3 simultaneous ETH/USD
+          //     positions on 2026-01-13 (root cause still under investigation)
+          //
+          // Both checks required: API might have lag, but our local tracking is authoritative
+          if (not symbols_in_use.contains(symbol) and not position_strategies.contains(symbol)) {
             // Execute first enabled signal
             for (const auto &signal : signals) {
               if (signal.should_buy and
@@ -1364,10 +1460,10 @@ void run_live_trading(
                 std::println("   Buying ${:.0f} of {}...", notional_amount,
                              symbol);
 
-                // Encode strategy and exit params in client_order_id
+                // Encode strategy and exit params in client_order_id (includes symbol and timestamp for uniqueness)
                 auto client_order_id =
-                    encode_client_order_id(signal.strategy_name, take_profit_pct,
-                                           stop_loss_pct, trailing_stop_pct);
+                    encode_client_order_id(signal.strategy_name, symbol,
+                                           take_profit_pct, stop_loss_pct, trailing_stop_pct);
                 auto order =
                     client.place_order(symbol, "buy", notional_amount, client_order_id);
                 if (order) {
@@ -1390,6 +1486,12 @@ void run_live_trading(
                       position_strategies[symbol] = signal.strategy_name;
                       position_entry_times[symbol] = now;
                       position_order_ids[symbol] = order_id;
+
+                      // WITHIN-CYCLE PROTECTION: Immediately add to symbols_in_use
+                      // If multiple strategies fire in the same cycle (before next API refresh),
+                      // this prevents placing duplicate orders for the same symbol
+                      symbols_in_use.insert(symbol);
+
                       ++strategy_stats[signal.strategy_name].trades_executed;
 
                     } else {
@@ -1400,6 +1502,10 @@ void run_live_trading(
                     std::println("✅ Order placed (could not parse response)");
                     position_strategies[symbol] = signal.strategy_name;
                     position_entry_times[symbol] = now;
+
+                    // WITHIN-CYCLE PROTECTION: Immediately add to symbols_in_use
+                    symbols_in_use.insert(symbol);
+
                     ++strategy_stats[signal.strategy_name].trades_executed;
 
                     // Can't log strategy assignment without order_id
@@ -1465,7 +1571,20 @@ void run_live_trading(
               ++strategy_stats[signal.strategy_name].signals_generated;
           }
 
-          if (not symbols_in_use.contains(symbol)) {
+          // DUPLICATE ORDER PREVENTION: Two-layer guard
+          //
+          // Layer 1: symbols_in_use (populated from API each cycle)
+          //   - Contains symbols from /v2/positions and /v2/orders?status=open
+          //   - Protects against placing orders when API shows active positions/orders
+          //
+          // Layer 2: position_strategies (persistent in-memory map)
+          //   - Contains symbols we've placed orders for in this session
+          //   - Protected by 5-minute cleanup grace period (see lines 1280-1310)
+          //   - Critical for handling whatever timing issue caused 3 simultaneous ETH/USD
+          //     positions on 2026-01-13 (root cause still under investigation)
+          //
+          // Both checks required: API might have lag, but our local tracking is authoritative
+          if (not symbols_in_use.contains(symbol) and not position_strategies.contains(symbol)) {
             // Execute first enabled signal
             for (const auto &signal : signals) {
               if (signal.should_buy and
@@ -1552,10 +1671,10 @@ void run_live_trading(
                 std::println("   Buying ${:.0f} of {}...", notional_amount,
                              symbol);
 
-                // Encode strategy and exit params in client_order_id
+                // Encode strategy and exit params in client_order_id (includes symbol and timestamp for uniqueness)
                 auto client_order_id =
-                    encode_client_order_id(signal.strategy_name, take_profit_pct,
-                                           stop_loss_pct, trailing_stop_pct);
+                    encode_client_order_id(signal.strategy_name, symbol,
+                                           take_profit_pct, stop_loss_pct, trailing_stop_pct);
                 auto order =
                     client.place_order(symbol, "buy", notional_amount, client_order_id);
                 if (order) {
@@ -1578,6 +1697,12 @@ void run_live_trading(
                       position_strategies[symbol] = signal.strategy_name;
                       position_entry_times[symbol] = now;
                       position_order_ids[symbol] = order_id;
+
+                      // WITHIN-CYCLE PROTECTION: Immediately add to symbols_in_use
+                      // If multiple strategies fire in the same cycle (before next API refresh),
+                      // this prevents placing duplicate orders for the same symbol
+                      symbols_in_use.insert(symbol);
+
                       ++strategy_stats[signal.strategy_name].trades_executed;
 
                     } else {
@@ -1588,6 +1713,10 @@ void run_live_trading(
                     std::println("✅ Order placed (could not parse response)");
                     position_strategies[symbol] = signal.strategy_name;
                     position_entry_times[symbol] = now;
+
+                    // WITHIN-CYCLE PROTECTION: Immediately add to symbols_in_use
+                    symbols_in_use.insert(symbol);
+
                     ++strategy_stats[signal.strategy_name].trades_executed;
 
                     // Can't log strategy assignment without order_id

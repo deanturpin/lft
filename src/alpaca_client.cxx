@@ -41,6 +41,7 @@ AlpacaClient::get_snapshots(const std::vector<std::string> &symbols) {
   // Create HTTPS client for market data API
   auto client = httplib::Client{data_url_};
   client.set_connection_timeout(10);
+  client.set_read_timeout(30);
 
   // Build request path
   auto path = std::format("/v2/stocks/snapshots?symbols={}", symbol_list);
@@ -119,6 +120,7 @@ AlpacaClient::get_crypto_snapshots(const std::vector<std::string> &symbols) {
   // Create HTTPS client for market data API
   auto client = httplib::Client{data_url_};
   client.set_connection_timeout(10);
+  client.set_read_timeout(30);
 
   // Build request path for crypto (v1beta3)
   auto path =
@@ -193,6 +195,7 @@ AlpacaClient::get_crypto_snapshots(const std::vector<std::string> &symbols) {
 std::expected<std::string, AlpacaError> AlpacaClient::get_account() {
   auto client = httplib::Client{base_url_};
   client.set_connection_timeout(10);
+  client.set_read_timeout(30);
 
   httplib::Headers headers = {{"APCA-API-KEY-ID", api_key_},
                               {"APCA-API-SECRET-KEY", api_secret_}};
@@ -217,6 +220,7 @@ std::expected<std::string, AlpacaError> AlpacaClient::get_account() {
 std::expected<std::string, AlpacaError> AlpacaClient::get_positions() {
   auto client = httplib::Client{base_url_};
   client.set_connection_timeout(10);
+  client.set_read_timeout(30);
 
   httplib::Headers headers = {{"APCA-API-KEY-ID", api_key_},
                               {"APCA-API-SECRET-KEY", api_secret_}};
@@ -241,6 +245,7 @@ std::expected<std::string, AlpacaError> AlpacaClient::get_positions() {
 std::expected<std::string, AlpacaError> AlpacaClient::get_open_orders() {
   auto client = httplib::Client{base_url_};
   client.set_connection_timeout(10);
+  client.set_read_timeout(30);
 
   httplib::Headers headers = {{"APCA-API-KEY-ID", api_key_},
                               {"APCA-API-SECRET-KEY", api_secret_}};
@@ -265,6 +270,7 @@ std::expected<std::string, AlpacaError> AlpacaClient::get_open_orders() {
 std::expected<std::string, AlpacaError> AlpacaClient::get_all_orders() {
   auto client = httplib::Client{base_url_};
   client.set_connection_timeout(30); // Longer timeout for potentially large response
+  client.set_read_timeout(60); // Large response may take time
 
   httplib::Headers headers = {{"APCA-API-KEY-ID", api_key_},
                               {"APCA-API-SECRET-KEY", api_secret_}};
@@ -293,6 +299,7 @@ AlpacaClient::place_order(std::string_view symbol, std::string_view side,
 
   auto client = httplib::Client{base_url_};
   client.set_connection_timeout(10);
+  client.set_read_timeout(15); // Fail fast for order placement
 
   httplib::Headers headers = {{"APCA-API-KEY-ID", api_key_},
                               {"APCA-API-SECRET-KEY", api_secret_},
@@ -343,6 +350,7 @@ AlpacaClient::place_order_qty(std::string_view symbol, std::string_view side,
 
   auto client = httplib::Client{base_url_};
   client.set_connection_timeout(10);
+  client.set_read_timeout(15); // Fail fast for order placement
 
   httplib::Headers headers = {{"APCA-API-KEY-ID", api_key_},
                               {"APCA-API-SECRET-KEY", api_secret_},
@@ -391,6 +399,7 @@ std::expected<std::string, AlpacaError>
 AlpacaClient::close_position(std::string_view symbol) {
   auto client = httplib::Client{base_url_};
   client.set_connection_timeout(10);
+  client.set_read_timeout(15); // Fail fast for position closing
 
   httplib::Headers headers = {{"APCA-API-KEY-ID", api_key_},
                               {"APCA-API-SECRET-KEY", api_secret_}};
@@ -424,6 +433,7 @@ AlpacaClient::get_bars(std::string_view symbol, std::string_view timeframe,
 
   auto client = httplib::Client{data_url_};
   client.set_connection_timeout(30);
+  client.set_read_timeout(60); // Historical data can be large
 
   // Build request path for stock bars (using IEX feed for free tier)
   auto path = std::format(
@@ -477,6 +487,7 @@ AlpacaClient::get_crypto_bars(std::string_view symbol,
 
   auto client = httplib::Client{data_url_};
   client.set_connection_timeout(30);
+  client.set_read_timeout(60); // Historical data can be large
 
   // Build request path for crypto bars
   auto path =
