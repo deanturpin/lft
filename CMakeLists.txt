@@ -34,6 +34,16 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(httplib json)
 
+# FTXUI for terminal UI
+find_package(ftxui QUIET)
+if(NOT ftxui_FOUND)
+    message(STATUS "FTXUI not found, TUI will be disabled")
+    set(HAVE_FTXUI FALSE)
+else()
+    message(STATUS "FTXUI found, TUI enabled")
+    set(HAVE_FTXUI TRUE)
+endif()
+
 # Include directories
 include_directories(include)
 
@@ -49,6 +59,23 @@ add_library(strategies STATIC
 )
 target_link_libraries(strategies PUBLIC alpaca_client)
 
+# TUI library (optional)
+if(HAVE_FTXUI)
+    add_library(tui STATIC
+        src/tui.cxx
+    )
+    target_link_libraries(tui PUBLIC
+        ftxui::screen
+        ftxui::dom
+        ftxui::component
+    )
+endif()
+
 # Main executable
 add_executable(lft src/lft.cxx)
-target_link_libraries(lft PRIVATE strategies)  # strategies already links alpaca_client
+if(HAVE_FTXUI)
+    target_link_libraries(lft PRIVATE strategies tui)
+    target_compile_definitions(lft PRIVATE HAVE_FTXUI=1)
+else()
+    target_link_libraries(lft PRIVATE strategies)
+endif()
