@@ -41,6 +41,10 @@
 #include <thread>
 #include <vector>
 
+#ifdef HAVE_FTXUI
+#include "tui.hxx"
+#endif
+
 // Include compile-time exit logic tests
 // This header defines: operator""_pc, stock_spread, crypto_spread,
 // take_profit_pct, stop_loss_pct, trailing_stop_pct
@@ -809,7 +813,12 @@ static_assert(has_positive_edge(boundary_move, boundary_costs),
 } // namespace
 
 void print_account_stats(lft::AlpacaClient &client,
-                         const std::chrono::system_clock::time_point &now) {
+                         const std::chrono::system_clock::time_point &now
+#ifdef HAVE_FTXUI
+                         ,
+                         std::shared_ptr<tui::trading_monitor> monitor = nullptr
+#endif
+) {
   auto account_result = client.get_account();
   if (not account_result)
     return;
@@ -849,6 +858,14 @@ void print_account_stats(lft::AlpacaClient &client,
           ? account_json["trading_blocked"].get<bool>()
           : false;
 
+#ifdef HAVE_FTXUI
+  // Update TUI with account info (estimate position count from long_market_value)
+  if (monitor) {
+    auto position_count =
+        long_market_value > 0.0 ? static_cast<size_t>(long_market_value / 1000.0) : 0uz;
+    monitor->update_account(equity, buying_power, position_count);
+  }
+#else
   std::println("\n💰 ACCOUNT STATUS");
   std::println("{:-<70}", "");
   std::println("Cash:              ${:>12.2f}", cash);
@@ -893,6 +910,7 @@ void print_account_stats(lft::AlpacaClient &client,
     std::println("{}⚠  WARNING: Cash (${:.2f}) below trade size (${:.2f}){}",
                  colour_yellow, cash, notional_amount, colour_reset);
   }
+#endif
 }
 
 
@@ -939,11 +957,18 @@ void log_blocked_trade(
 void run_live_trading(
     lft::AlpacaClient &client, const std::vector<std::string> &stocks,
     const std::vector<std::string> &crypto,
-    const std::map<std::string, lft::StrategyConfig> &configs) {
+    const std::map<std::string, lft::StrategyConfig> &configs
+#ifdef HAVE_FTXUI
+    ,
+    std::shared_ptr<tui::trading_monitor> monitor = nullptr
+#endif
+) {
 
+#ifndef HAVE_FTXUI
   std::println("{}🚀 LIVE TRADING MODE{}", colour_green, colour_reset);
   std::println("Using calibrated exit parameters per strategy");
   std::println("Running for 1 hour, then will re-calibrate\n");
+#endif
 
   auto price_histories = std::map<std::string, lft::PriceHistory>{};
   auto position_strategies = std::map<std::string, std::string>{};
@@ -958,8 +983,15 @@ void run_live_trading(
   for (const auto &[name, config] : configs)
     strategy_stats[name] = lft::StrategyStats{name};
 
+#ifdef HAVE_FTXUI
+  auto order_number = 0uz;
+  auto cycle_count = 0uz;
+#endif
+
   // Startup: recover open positions from order history
+#ifndef HAVE_FTXUI
   std::println("\n{}🔄 Recovering positions from API...{}", colour_cyan, colour_reset);
+#endif
   auto all_orders_result = client.get_all_orders();
   if (all_orders_result) {
     auto orders_json =
@@ -1015,9 +1047,15 @@ void run_live_trading(
 
   for (auto cycle : std::views::iota(0, max_cycles)) {
     auto now = std::chrono::system_clock::now();
+
+#ifdef HAVE_FTXUI
+    if (monitor)
+      monitor->increment_cycle_count();
+#else
     std::println("\n{:-<70}", "");
     std::println("Tick at {:%Y-%m-%d %H:%M:%S}", now);
     std::println("{:-<70}", "");
+#endif
 
     // Calculate current ET time for market hours checks
     auto now_t = std::chrono::system_clock::to_time_t(now);
@@ -1039,13 +1077,42 @@ void run_live_trading(
     auto force_eod_close = current_time >= eod_cutoff and current_time < market_close;
 
     // Show market hours status
+#ifdef HAVE_FTXUI
+    if (monitor) {
+      auto is_open = is_market_hours and not force_eod_close;
+      std::string countdown;
+      if (current_time < market_open) {
+        auto mins_to_open =
+            std::chrono::duration_cast<std::chrono::minutes>(market_open -
+                                                              current_time)
+                .count();
+        countdown = std::format("Opens in {}h {}m", mins_to_open / 60,
+                                mins_to_open % 60);
+      } else if (force_eod_close) {
+        countdown = "Liquidating positions";
+      } else {
+        auto mins_to_close =
+            std::chrono::duration_cast<std::chrono::minutes>(market_close -
+                                                              current_time)
+                .count();
+        countdown = std::format("Closes in {}h {}m", mins_to_close / 60,
+                                mins_to_close % 60);
+      }
+      monitor->set_market_status(is_open, countdown);
+    }
+#else
     if (current_time < market_open or current_time >= market_close)
       std::println("{}⏸️  OUTSIDE MARKET HOURS (9:30 AM - 4:00 PM ET) - No new trades{}\n", colour_yellow, colour_reset);
     else if (force_eod_close)
       std::println("{}🔔 END OF DAY LIQUIDATION (3:57 PM ET) - Closing all positions{}\n", colour_yellow, colour_reset);
+#endif
 
     // Display account status
+#ifdef HAVE_FTXUI
+    print_account_stats(client, now, monitor);
+#else
     print_account_stats(client, now);
+#endif
 
     // Fetch open positions and pending orders (API is source of truth)
     auto positions_result = client.get_positions();
@@ -1068,6 +1135,7 @@ void run_live_trading(
         }
 
         if (not positions_json.empty()) {
+#ifndef HAVE_FTXUI
           std::println("\n📊 OPEN POSITIONS");
           std::println("{:-<130}", "");
           std::println(
@@ -1075,6 +1143,7 @@ void run_live_trading(
               "SYMBOL", "QTY", "ENTRY", "CURRENT", "TARGET", "VALUE", "P&L",
               "P&L %", "TGT %");
           std::println("{:-<130}", "");
+#endif
 
           // Convert to vector and sort by P&L % (descending)
           auto positions_vec = std::vector<nlohmann::json>{};
@@ -1096,6 +1165,7 @@ void run_live_trading(
           for (const auto &pos : positions_vec) {
             auto symbol = pos["symbol"].get<std::string>();
             auto qty = pos["qty"].get<std::string>();
+            auto qty_double = std::stod(qty);
             auto avg_entry =
                 std::stod(pos["avg_entry_price"].get<std::string>());
             auto current = std::stod(pos["current_price"].get<std::string>());
@@ -1121,14 +1191,44 @@ void run_live_trading(
 
             auto colour = unrealized_plpc >= 0.0 ? colour_green : colour_red;
 
+#ifdef HAVE_FTXUI
+            // Update TUI with position data
+            if (monitor) {
+              auto strategy = position_strategies.contains(symbol)
+                                  ? position_strategies[symbol]
+                                  : "unknown";
+              auto entry_time = position_entry_times.contains(symbol)
+                                    ? position_entry_times[symbol]
+                                    : std::chrono::system_clock::now();
+
+              monitor->update_position(
+                  symbol, tui::position_data{
+                              .symbol = symbol,
+                              .strategy = strategy,
+                              .entry_price = avg_entry,
+                              .current_price = current,
+                              .quantity = qty_double,
+                              .market_value = market_value,
+                              .unrealised_pnl = unrealized_pl,
+                              .unrealised_pct = unrealized_plpc,
+                              .take_profit_pct = take_profit_pct * 100.0,
+                              .stop_loss_pct = stop_loss_pct * 100.0,
+                              .trailing_stop_pct = trailing_stop_pct * 100.0,
+                              .entry_time = entry_time,
+                          });
+            }
+#else
             std::println(
                 "{}{:<10} {:>18} {:>10.2f} {:>10.2f} {:>10.2f} {:>10.2f} "
                 "{:>10.2f} {:>9.2f}% {:>9.2f}%{}",
                 colour, symbol, qty, avg_entry, current, target_price,
                 market_value, unrealized_pl, unrealized_plpc, target_plpc,
                 colour_reset);
+#endif
           }
+#ifndef HAVE_FTXUI
           std::println("");
+#endif
 
           // Check if we need to close all positions before market close
           if (force_eod_close) {
@@ -1771,19 +1871,46 @@ int main() {
     return 1;
   }
 
+#ifdef HAVE_FTXUI
+  // Initialize TUI
+  auto monitor = std::make_shared<tui::trading_monitor>();
+  std::unique_ptr<tui::tui_renderer> renderer;
+
+  if (tui::supports_interactive()) {
+    renderer = std::make_unique<tui::tui_renderer>(monitor);
+    renderer->start();
+  } else {
+    std::println("{}⚠ TUI not supported, using text mode{}", colour_yellow,
+                 colour_reset);
+  }
+#else
   std::println("{}🤖 LFT - LOW FREQUENCY TRADER{}", colour_cyan, colour_reset);
+#endif
 
   // Phase 1: Calibrate
   auto configs = calibrate_all_strategies(client, stocks, crypto);
 
   // Check if any strategies are enabled
   if (std::ranges::none_of(configs,
-                           [](const auto &p) { return p.second.enabled; }))
-    std::println("{}⚠ No profitable strategies - will only manage exits{}\n",
-                 colour_yellow, colour_reset);
+                           [](const auto &p) { return p.second.enabled; })) {
+#ifdef HAVE_FTXUI
+    if (not renderer)
+#endif
+      std::println("{}⚠ No profitable strategies - will only manage exits{}\n",
+                   colour_yellow, colour_reset);
+  }
 
   // Phase 2: Live trading (runs for 1 hour, then exits)
+#ifdef HAVE_FTXUI
+  run_live_trading(client, stocks, crypto, configs, monitor);
+#else
   run_live_trading(client, stocks, crypto, configs);
+#endif
+
+#ifdef HAVE_FTXUI
+  if (renderer)
+    renderer->stop();
+#endif
 
   return 0;
 }
