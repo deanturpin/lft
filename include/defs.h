@@ -8,7 +8,7 @@ constexpr auto calibration_days = 30;         // Duration for strategy calibrati
 constexpr auto min_trades_to_enable = 10;     // Minimum trades to enable strategy
 
 // Trade eligibility filters (Tier 1 - Must Do)
-constexpr auto max_spread_bps_stocks = 60.0;  // Max 60 bps (0.60%) spread for stocks
+constexpr auto max_spread_bps_stocks = 30.0;  // Max 30 bps (0.30%) spread for stocks
 constexpr auto max_spread_bps_crypto = 100.0; // Max 100 bps (1.00%) spread for crypto
 constexpr auto min_volume_ratio = 0.5;        // Min 50% of 20-period average volume
 
