@@ -1241,57 +1241,69 @@ void run_live_trading(
 #ifdef HAVE_FTXUI
           }
 #endif
-
-          // Check if we need to close all positions before market close
-          if (force_eod_close) {
-            std::println("\n{}⏰ END OF DAY: Closing all positions (market closes in 5 minutes){}",
-                         colour_yellow, colour_reset);
-
-            for (const auto &pos : positions_json) {
-              auto symbol = pos["symbol"].get<std::string>();
-              auto unrealized_pl = std::stod(pos["unrealized_pl"].get<std::string>());
-              auto cost_basis = std::stod(pos["cost_basis"].get<std::string>());
-              auto profit_percent = (unrealized_pl / cost_basis) * 100.0;
-
-              // Skip crypto - trades 24/7
-              if (is_crypto(symbol)) {
-                std::println("   Skipping {} (crypto trades 24/7)", symbol);
-                continue;
-              }
-
-              std::println("   Closing {}: ${:.2f} ({:.2f}%)",
-                           symbol, unrealized_pl, profit_percent);
-
-              auto close_result = client.close_position(symbol);
-              if (close_result) {
-                std::println("   ✅ {} closed", symbol);
-
-                auto strategy = position_strategies.contains(symbol)
-                                    ? position_strategies[symbol]
-                                    : std::string{"unknown"};
-
-                if (strategy_stats.contains(strategy)) {
-                  ++strategy_stats[strategy].trades_closed;
-                  if (unrealized_pl > 0.0) {
-                    ++strategy_stats[strategy].profitable_trades;
-                    strategy_stats[strategy].total_profit += unrealized_pl;
-                  } else {
-                    ++strategy_stats[strategy].losing_trades;
-                    strategy_stats[strategy].total_loss += unrealized_pl;
-                  }
-                }
-
-                position_strategies.erase(symbol);
-                position_peaks.erase(symbol);
-                position_entry_times.erase(symbol);
-              } else {
-                std::println("   ❌ Failed to close {}", symbol);
-              }
-            }
-            std::println("");
+        } else {
+          // No open positions
+#ifdef HAVE_FTXUI
+          if (not tui_active) {
+#endif
+            std::println("\n{}📭 No open positions{}", colour_cyan, colour_reset);
+#ifdef HAVE_FTXUI
           }
+#endif
+        }
 
-          // Evaluate exits using strategy-specific parameters
+        // Check if we need to close all positions before market close
+        if (not positions_json.empty() and force_eod_close) {
+          std::println("\n{}⏰ END OF DAY: Closing all positions (market closes in 5 minutes){}",
+                       colour_yellow, colour_reset);
+
+          for (const auto &pos : positions_json) {
+            auto symbol = pos["symbol"].get<std::string>();
+            auto unrealized_pl =
+                std::stod(pos["unrealized_pl"].get<std::string>());
+            auto cost_basis = std::stod(pos["cost_basis"].get<std::string>());
+            auto profit_percent = (unrealized_pl / cost_basis) * 100.0;
+
+            // Skip crypto - trades 24/7
+            if (is_crypto(symbol)) {
+              std::println("   Skipping {} (crypto trades 24/7)", symbol);
+              continue;
+            }
+
+            std::println("   Closing {}: ${:.2f} ({:.2f}%)", symbol,
+                         unrealized_pl, profit_percent);
+
+            auto close_result = client.close_position(symbol);
+            if (close_result) {
+              std::println("   ✅ {} closed", symbol);
+
+              auto strategy = position_strategies.contains(symbol)
+                                  ? position_strategies[symbol]
+                                  : std::string{"unknown"};
+
+              if (strategy_stats.contains(strategy)) {
+                ++strategy_stats[strategy].trades_closed;
+                if (unrealized_pl > 0.0) {
+                  ++strategy_stats[strategy].profitable_trades;
+                  strategy_stats[strategy].total_profit += unrealized_pl;
+                } else {
+                  ++strategy_stats[strategy].losing_trades;
+                  strategy_stats[strategy].total_loss += unrealized_pl;
+                }
+              }
+
+              position_strategies.erase(symbol);
+              position_peaks.erase(symbol);
+              position_entry_times.erase(symbol);
+            } else {
+              std::println("   ❌ Failed to close {}", symbol);
+            }
+          }
+          std::println("");
+        }
+
+        // Evaluate exits using strategy-specific parameters
+        if (not positions_json.empty()) {
           for (const auto &pos : positions_json) {
             auto symbol = pos["symbol"].get<std::string>();
             auto unrealized_pl =
