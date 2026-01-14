@@ -960,7 +960,8 @@ void run_live_trading(
     const std::map<std::string, lft::StrategyConfig> &configs
 #ifdef HAVE_FTXUI
     ,
-    std::shared_ptr<tui::trading_monitor> monitor = nullptr
+    std::shared_ptr<tui::trading_monitor> monitor = nullptr,
+    bool tui_active = false
 #endif
 ) {
 
@@ -1135,14 +1136,19 @@ void run_live_trading(
         }
 
         if (not positions_json.empty()) {
-#ifndef HAVE_FTXUI
-          std::println("\n📊 OPEN POSITIONS");
-          std::println("{:-<130}", "");
-          std::println(
-              "{:<10} {:>18} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10}",
-              "SYMBOL", "QTY", "ENTRY", "CURRENT", "TARGET", "VALUE", "P&L",
-              "P&L %", "TGT %");
-          std::println("{:-<130}", "");
+#ifdef HAVE_FTXUI
+          // Only suppress console output if TUI is actually running
+          if (not tui_active) {
+#endif
+            std::println("\n📊 OPEN POSITIONS");
+            std::println("{:-<130}", "");
+            std::println(
+                "{:<10} {:>18} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10}",
+                "SYMBOL", "QTY", "ENTRY", "CURRENT", "TARGET", "VALUE", "P&L",
+                "P&L %", "TGT %");
+            std::println("{:-<130}", "");
+#ifdef HAVE_FTXUI
+          }
 #endif
 
           // Convert to vector and sort by P&L % (descending)
@@ -1193,7 +1199,7 @@ void run_live_trading(
 
 #ifdef HAVE_FTXUI
             // Update TUI with position data
-            if (monitor) {
+            if (tui_active and monitor) {
               auto strategy = position_strategies.contains(symbol)
                                   ? position_strategies[symbol]
                                   : "unknown";
@@ -1216,18 +1222,24 @@ void run_live_trading(
                               .trailing_stop_pct = trailing_stop_pct * 100.0,
                               .entry_time = entry_time,
                           });
+            } else {
+#endif
+              std::println(
+                  "{}{:<10} {:>18} {:>10.2f} {:>10.2f} {:>10.2f} {:>10.2f} "
+                  "{:>10.2f} {:>9.2f}% {:>9.2f}%{}",
+                  colour, symbol, qty, avg_entry, current, target_price,
+                  market_value, unrealized_pl, unrealized_plpc, target_plpc,
+                  colour_reset);
+#ifdef HAVE_FTXUI
             }
-#else
-            std::println(
-                "{}{:<10} {:>18} {:>10.2f} {:>10.2f} {:>10.2f} {:>10.2f} "
-                "{:>10.2f} {:>9.2f}% {:>9.2f}%{}",
-                colour, symbol, qty, avg_entry, current, target_price,
-                market_value, unrealized_pl, unrealized_plpc, target_plpc,
-                colour_reset);
 #endif
           }
-#ifndef HAVE_FTXUI
-          std::println("");
+#ifdef HAVE_FTXUI
+          if (not tui_active) {
+#endif
+            std::println("");
+#ifdef HAVE_FTXUI
+          }
 #endif
 
           // Check if we need to close all positions before market close
@@ -1902,7 +1914,7 @@ int main() {
 
   // Phase 2: Live trading (runs for 1 hour, then exits)
 #ifdef HAVE_FTXUI
-  run_live_trading(client, stocks, crypto, configs, monitor);
+  run_live_trading(client, stocks, crypto, configs, monitor, renderer != nullptr);
 #else
   run_live_trading(client, stocks, crypto, configs);
 #endif
