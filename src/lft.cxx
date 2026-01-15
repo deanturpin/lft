@@ -199,7 +199,8 @@ struct Position {
   double entry_price{};
   double quantity{};
   std::string entry_time;
-  std::size_t entry_bar_index{}; // For time-based exit in backtest
+  std::size_t entry_bar_index{}; // Bar index when entered
+  std::size_t exit_bar_index{};  // Bar index when exited
   double peak_price{};
   // Exit criteria are now unified (see exit_logic_tests.h)
 };
@@ -317,8 +318,18 @@ void process_bar(
     if (should_exit) {
       stats.cash += current_value;
 
+      // Calculate trade duration
+      auto duration_bars = bar_index - pos.entry_bar_index;
+
       auto &strategy_stat = stats.strategy_stats[pos.strategy];
       ++strategy_stat.trades_closed;
+
+      // Track duration statistics
+      strategy_stat.total_duration_bars += duration_bars;
+      if (duration_bars > strategy_stat.max_duration_bars)
+        strategy_stat.max_duration_bars = duration_bars;
+      if (duration_bars < strategy_stat.min_duration_bars)
+        strategy_stat.min_duration_bars = duration_bars;
 
       if (unrealized_pl > 0.0) {
         ++strategy_stat.profitable_trades;
@@ -506,8 +517,18 @@ BacktestStats run_backtest_with_data(
 
     stats.cash += current_value;
 
+    // Calculate trade duration (EOD exit - last bar)
+    auto duration_bars = (bars.size() - 1) - pos.entry_bar_index;
+
     auto &strategy_stat = stats.strategy_stats[pos.strategy];
     ++strategy_stat.trades_closed;
+
+    // Track duration statistics
+    strategy_stat.total_duration_bars += duration_bars;
+    if (duration_bars > strategy_stat.max_duration_bars)
+      strategy_stat.max_duration_bars = duration_bars;
+    if (duration_bars < strategy_stat.min_duration_bars)
+      strategy_stat.min_duration_bars = duration_bars;
 
     if (unrealized_pl > 0.0) {
       ++strategy_stat.profitable_trades;
@@ -550,6 +571,7 @@ lft::StrategyConfig calibrate_strategy(
   auto win_rate = stats.strategy_stats[strategy_name].win_rate();
   auto expected_move =
       stats.strategy_stats[strategy_name].avg_forward_return_bps();
+  auto avg_duration = stats.strategy_stats[strategy_name].avg_duration_bars();
 
   auto config = configs[strategy_name];
   config.trades_closed = trades;
@@ -562,9 +584,9 @@ lft::StrategyConfig calibrate_strategy(
     auto colour = profit > 0.0 ? colour_green : colour_red;
     std::println(
         "{}✓ {} Complete: {} signals, {} trades, ${:.2f} P&L, {:.1f}% WR, "
-        "{:.1f} bps avg move{}",
+        "{:.1f} bps avg move, {:.1f} bars avg duration{}",
         colour, strategy_name, signals, trades, profit, win_rate, expected_move,
-        colour_reset);
+        avg_duration, colour_reset);
   }
 
   return config;
@@ -813,7 +835,9 @@ static_assert(has_positive_edge(boundary_move, boundary_costs),
 } // namespace
 
 void print_account_stats(lft::AlpacaClient &client,
-                         const std::chrono::system_clock::time_point &now
+                         const std::chrono::system_clock::time_point &now,
+                         double &starting_equity,
+                         bool &starting_equity_captured
 #ifdef HAVE_FTXUI
                          ,
                          std::shared_ptr<tui::trading_monitor> monitor = nullptr
@@ -841,6 +865,16 @@ void print_account_stats(lft::AlpacaClient &client,
       (account_json.contains("equity") and not account_json["equity"].is_null())
           ? std::stod(account_json["equity"].get<std::string>())
           : 0.0;
+
+  // Capture starting equity on first call
+  if (not starting_equity_captured and equity > 0.0) {
+    starting_equity = equity;
+    starting_equity_captured = true;
+#ifndef HAVE_FTXUI
+    std::println("\n{}🚀 Session starting equity: ${:,.2f}{}", colour_cyan,
+                 starting_equity, colour_reset);
+#endif
+  }
   auto daytrading_buying_power =
       (account_json.contains("daytrading_buying_power") and
        not account_json["daytrading_buying_power"].is_null())
@@ -868,8 +902,23 @@ void print_account_stats(lft::AlpacaClient &client,
 #else
   std::println("\n💰 ACCOUNT STATUS");
   std::println("{:-<70}", "");
+
+  // Session P&L (if captured)
+  if (starting_equity_captured) {
+    auto session_pnl = equity - starting_equity;
+    auto session_pnl_pct = (session_pnl / starting_equity) * 100.0;
+    auto pnl_colour = session_pnl > 0.0 ? colour_green
+                    : session_pnl < 0.0 ? colour_red
+                    : colour_reset;
+
+    std::println("Starting Equity:   ${:>12.2f}", starting_equity);
+    std::println("Current Equity:    ${:>12.2f}", equity);
+    std::println("{}Session P&L:       {:+>12.2f} ({:+.2f}%){}", pnl_colour,
+                 session_pnl, session_pnl_pct, colour_reset);
+    std::println("{:-<70}", "");
+  }
+
   std::println("Cash:              ${:>12.2f}", cash);
-  std::println("Equity:            ${:>12.2f}", equity);
   std::println("Long Positions:    ${:>12.2f}", long_market_value);
   std::println("Buying Power:      ${:>12.2f}", buying_power);
 
@@ -983,6 +1032,10 @@ void run_live_trading(
   // Initialise stats for ALL strategies (enabled and disabled)
   for (const auto &[name, config] : configs)
     strategy_stats[name] = lft::StrategyStats{name};
+
+  // Capture starting equity for session P&L tracking
+  auto starting_equity = 0.0;
+  auto starting_equity_captured = false;
 
 #ifdef HAVE_FTXUI
   auto order_number = 0uz;
@@ -1110,9 +1163,9 @@ void run_live_trading(
 
     // Display account status
 #ifdef HAVE_FTXUI
-    print_account_stats(client, now, monitor);
+    print_account_stats(client, now, starting_equity, starting_equity_captured, monitor);
 #else
-    print_account_stats(client, now);
+    print_account_stats(client, now, starting_equity, starting_equity_captured);
 #endif
 
     // Fetch open positions and pending orders (API is source of truth)

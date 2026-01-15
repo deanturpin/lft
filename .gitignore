@@ -33,3 +33,5 @@ _deps/
 VPS_DEPLOYMENT.md
 Dockerfile
 docker-compose.yml
+
+backtest*.txt

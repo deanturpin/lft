@@ -45,6 +45,11 @@ struct StrategyStats {
     double total_win_bps{};             // Sum of winning trade sizes
     double total_loss_bps{};            // Sum of losing trade sizes (negative)
 
+    // Trade duration tracking
+    std::size_t total_duration_bars{};  // Sum of all trade durations in bars
+    std::size_t max_duration_bars{};    // Longest trade duration
+    std::size_t min_duration_bars{std::numeric_limits<std::size_t>::max()}; // Shortest trade
+
     double win_rate() const {
         return trades_closed > 0 ? (static_cast<double>(profitable_trades) / trades_closed) * 100.0 : 0.0;
     }
@@ -63,6 +68,14 @@ struct StrategyStats {
 
     double avg_loss_bps() const {
         return losing_trades > 0 ? total_loss_bps / losing_trades : 0.0;
+    }
+
+    double avg_duration_bars() const {
+        return trades_closed > 0 ? static_cast<double>(total_duration_bars) / trades_closed : 0.0;
+    }
+
+    std::size_t median_duration_bars() const {
+        return trades_closed > 0 ? total_duration_bars / trades_closed : 0;
     }
 };
 
