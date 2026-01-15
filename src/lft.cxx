@@ -604,8 +604,8 @@ calibrate_all_strategies(lft::AlpacaClient &client,
 
   for (const auto &symbol : all_symbols) {
     auto crypto = is_crypto(symbol);
-    auto bars = crypto ? client.get_crypto_bars(symbol, "1Min", start, end)
-                       : client.get_bars(symbol, "1Min", start, end);
+    auto bars = crypto ? client.get_crypto_bars(symbol, "15Min", start, end)
+                       : client.get_bars(symbol, "15Min", start, end);
 
     if (bars) {
       symbol_bars[symbol] = std::move(*bars);
@@ -1443,7 +1443,57 @@ void run_live_trading(
       }
     }
 
-    // Fetch market data
+    // Fetch market data - 15-minute bars for strategy signals
+    // On first cycle, fetch last 20 bars (5 hours). After that, only fetch latest 2 bars.
+    auto is_first_cycle = price_histories.empty();
+    auto bars_end = now;
+    auto bars_start = is_first_cycle ? now - std::chrono::hours{5}
+                                     : now - std::chrono::minutes{30};  // Just last 2 bars
+    auto start_str = std::format("{:%Y-%m-%dT%H:%M:%SZ}", bars_start);
+    auto end_str = std::format("{:%Y-%m-%dT%H:%M:%SZ}", bars_end);
+
+    // Fetch 15-minute bars for all symbols
+    for (const auto &symbol : stocks) {
+      auto bars = client.get_bars(symbol, "15Min", start_str, end_str);
+      if (bars and not bars->empty()) {
+        auto &history = price_histories[symbol];
+
+        if (is_first_cycle) {
+          // First cycle: build full history
+          history = lft::PriceHistory{};
+          for (const auto &bar : *bars) {
+            history.add_bar(bar.close, bar.high, bar.low, bar.volume);
+          }
+        } else {
+          // Subsequent cycles: only add new bars
+          for (const auto &bar : *bars) {
+            history.add_bar(bar.close, bar.high, bar.low, bar.volume);
+          }
+        }
+      }
+    }
+
+    for (const auto &symbol : crypto) {
+      auto bars = client.get_crypto_bars(symbol, "15Min", start_str, end_str);
+      if (bars and not bars->empty()) {
+        auto &history = price_histories[symbol];
+
+        if (is_first_cycle) {
+          // First cycle: build full history
+          history = lft::PriceHistory{};
+          for (const auto &bar : *bars) {
+            history.add_bar(bar.close, bar.high, bar.low, bar.volume);
+          }
+        } else {
+          // Subsequent cycles: only add new bars
+          for (const auto &bar : *bars) {
+            history.add_bar(bar.close, bar.high, bar.low, bar.volume);
+          }
+        }
+      }
+    }
+
+    // Also fetch snapshots for spread checking and display
     auto stock_snapshots = client.get_snapshots(stocks);
 
     // Only fetch crypto if we have any crypto symbols configured
