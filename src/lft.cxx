@@ -852,8 +852,11 @@ struct EntryDecision {
 EntryDecision can_enter_position(
     std::string_view symbol, const std::set<std::string> &symbols_in_use,
     const std::map<std::string, std::string> &position_strategies,
-    const lft::Snapshot &snap, const lft::PriceHistory &history,
-    double max_spread_bps, double min_volume_ratio) {
+    const std::map<std::string, std::chrono::system_clock::time_point>
+        &symbol_cooldowns,
+    const std::chrono::system_clock::time_point &now, const lft::Snapshot &snap,
+    const lft::PriceHistory &history, double max_spread_bps,
+    double min_volume_ratio) {
 
   // Check 1: Already have open position or pending order?
   if (symbols_in_use.contains(std::string{symbol}))
@@ -863,7 +866,18 @@ EntryDecision can_enter_position(
   if (position_strategies.contains(std::string{symbol}))
     return {false, "position_tracked_locally"};
 
-  // Check 3: Spread and volume acceptable?
+  // Check 3: Still in cooldown period after recent exit?
+  if (symbol_cooldowns.contains(std::string{symbol})) {
+    auto cooldown_until = symbol_cooldowns.at(std::string{symbol});
+    if (now < cooldown_until) {
+      auto mins_remaining =
+          std::chrono::duration_cast<std::chrono::minutes>(cooldown_until - now)
+              .count();
+      return {false, std::format("cooldown_{}_min_remaining", mins_remaining)};
+    }
+  }
+
+  // Check 4: Spread and volume acceptable?
   auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
   if (spread_bps > max_spread_bps)
     return {false, std::format("spread_too_wide_{:.1f}bps_max_{:.1f}bps",
@@ -1081,6 +1095,8 @@ void run_live_trading(lft::AlpacaClient &client,
   auto position_order_ids = std::map<std::string, std::string>{};
   auto strategy_stats = std::map<std::string, lft::StrategyStats>{};
   auto api_positions = std::set<std::string>{}; // API is source of truth
+  auto symbol_cooldowns =
+      std::map<std::string, std::chrono::system_clock::time_point>{}; // Exit cooldown tracking
 
   // Initialise stats for ALL strategies (enabled and disabled)
   for (const auto &[name, config] : configs)
@@ -1418,6 +1434,10 @@ void run_live_trading(lft::AlpacaClient &client,
               position_strategies.erase(symbol);
               position_peaks.erase(symbol);
               position_entry_times.erase(symbol);
+
+              // Start cooldown period for this symbol
+              symbol_cooldowns[symbol] =
+                  now + std::chrono::minutes(lft::cooldown_minutes);
             } else {
               std::println("   ❌ Failed to close {}", symbol);
             }
@@ -1492,6 +1512,10 @@ void run_live_trading(lft::AlpacaClient &client,
 
                 position_strategies.erase(symbol);
                 position_peaks.erase(symbol);
+
+                // Start cooldown period for this symbol
+                symbol_cooldowns[symbol] =
+                    now + std::chrono::minutes(lft::cooldown_minutes);
                 position_entry_times.erase(symbol);
               } else {
                 std::println("❌ Failed to close position: {}", symbol);
@@ -1564,6 +1588,11 @@ void run_live_trading(lft::AlpacaClient &client,
         position_peaks.erase(symbol);
         position_entry_times.erase(symbol);
         position_order_ids.erase(symbol);
+
+        // Start cooldown period for this symbol
+        symbol_cooldowns[symbol] =
+            now + std::chrono::minutes(lft::cooldown_minutes);
+
         it = position_strategies.erase(it);
       } else {
         ++it;
@@ -1648,9 +1677,9 @@ void run_live_trading(lft::AlpacaClient &client,
 
           // Check if we can enter a position (centralised entry logic)
           // Only trading stocks now - use stock spread threshold
-          auto entry_decision =
-              can_enter_position(symbol, symbols_in_use, position_strategies,
-                                 snap, history, max_spread_bps_stocks, min_volume_ratio);
+          auto entry_decision = can_enter_position(
+              symbol, symbols_in_use, position_strategies, symbol_cooldowns, now,
+              snap, history, max_spread_bps_stocks, min_volume_ratio);
 
           if (not entry_decision.can_enter) {
             // Log why we can't enter

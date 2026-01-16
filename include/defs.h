@@ -84,7 +84,8 @@ inline const auto crypto = std::vector<std::string>{
 // Timing parameters
 // Note: Actual polling is aligned to :35 past each minute (see sleep_until_bar_ready)
 // Alpaca recalculates bars at :30 to include late trades, so :35 ensures complete data
-constexpr auto max_cycles = 60; // Run for 60 minutes then re-calibrate
+constexpr auto max_cycles = 60;       // Run for 60 minutes then re-calibrate
+constexpr auto cooldown_minutes = 15; // Minutes to wait before re-entering same symbol
 
 // Alert thresholds
 constexpr auto stock_alert_threshold = 2.0;  // Standard alert at 2% move
