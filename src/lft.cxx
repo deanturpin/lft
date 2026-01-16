@@ -1641,11 +1641,10 @@ void run_live_trading(lft::AlpacaClient &client,
                                                           price_histories)};
 
           // Count signals
-          for (const auto &signal : signals) {
+          for (const auto &signal : signals)
             if (signal.should_buy and configs.contains(signal.strategy_name) and
                 configs.at(signal.strategy_name).enabled)
               ++strategy_stats[signal.strategy_name].signals_generated;
-          }
 
           // Check if we can enter a position (centralised entry logic)
           // Only trading stocks now - use stock spread threshold
