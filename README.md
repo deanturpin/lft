@@ -1,6 +1,6 @@
 # LFT - Low Frequency Trader
 
-A fully automated C++23 multi-strategy trading system for US equities and cryptocurrency, built on Alpaca Markets API.
+A fully automated C++23 multi-strategy trading system for US equities, built on Alpaca Markets API.
 
 ![Alpaca Markets](alpaca.png)
 
@@ -27,15 +27,14 @@ A fully automated C++23 multi-strategy trading system for US equities and crypto
 - **Volume confidence filtering:** Reduces signal confidence in low-volume periods
 - **Noise regime detection:** Disables momentum strategies in high noise (>1.5%), disables mean reversion in low noise (<0.5%)
 - **Base exit parameters:** 2% TP/SL, 0.5% trailing stop (adaptive based on market conditions)
-- **Spread filtering:** Blocks trades with excessive bid-ask spreads (60 bps stocks, 100 bps crypto)
+- **Spread filtering:** Blocks trades with excessive bid-ask spreads (30 bps for stocks)
 - **End-of-day liquidation:** Auto-closes all equity positions at 3:55 PM ET to avoid overnight risk
 - **Duplicate order prevention:** Checks both open positions and pending orders before placing new trades
 
 ### Fully Automated Operation
 - **Restart recovery:** Rebuilds state from Alpaca API after restarts
 - **Pending order tracking:** Prevents duplicate orders during 1-minute polling cycle
-- **24/7 crypto trading:** Keeps crypto positions running continuously
-- **Intraday equity trading:** Closes all stock positions before market close
+- **Intraday equity trading:** Closes all stock positions before market close (3:55 PM ET)
 - **No manual intervention required**
 
 ## Quick Start
@@ -121,9 +120,28 @@ From historical analysis of 500 orders over 7 days:
 - [x] Phase 1: Manual trading with Alpaca API integration
 - [x] Phase 2: Backtesting framework with historic data
 - [x] Phase 3: Automated trading with duplicate prevention
-- [x] Phase 4: EOD liquidation and 24/7 operation
+- [x] Phase 4: EOD liquidation and automated operation
 - [ ] Phase 5: Real-time monitoring dashboard (web UI)
 - [ ] Phase 6: Production deployment to VPS
+
+## Cryptocurrency Trading
+
+**Status:** Temporarily removed (2026-01-16)
+
+Cryptocurrency trading has been removed from the codebase to simplify development and eliminate code duplication. Reasons:
+
+1. All crypto pairs were disabled due to duplicate order bug discovered 2026-01-13
+2. Crypto trading loop was 200+ lines of duplicated code from stock loop
+3. Removing dead code improves maintainability
+
+**To re-enable crypto trading:**
+
+- Fix the duplicate order bug root cause
+- Restore crypto code from git history (commit hash before 2026-01-16)
+- Consider refactoring to share entry logic between stocks and crypto
+- Re-test thoroughly with duplicate prevention
+
+The `crypto` vector in [include/defs.h](include/defs.h) remains (commented out) as documentation of previously supported pairs.
 
 ## Known Issues
 
