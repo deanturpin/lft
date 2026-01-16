@@ -860,21 +860,17 @@ EntryDecision can_enter_position(
     return {false, "position_tracked_locally"};
 
   // Check 3: Spread and volume acceptable?
-  if (not lft::Strategies::is_tradeable(snap, history, max_spread_bps,
-                                        min_volume_ratio)) {
-    auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
-    auto vol_ratio = lft::Strategies::calculate_volume_ratio(history);
+  // Calculate once and check inline to avoid redundant calculations
+  auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
+  auto vol_ratio = lft::Strategies::calculate_volume_ratio(history);
 
-    if (spread_bps > max_spread_bps)
-      return {false, std::format("spread_too_wide_{:.1f}bps_max_{:.1f}bps",
-                                 spread_bps, max_spread_bps)};
+  if (spread_bps > max_spread_bps)
+    return {false, std::format("spread_too_wide_{:.1f}bps_max_{:.1f}bps",
+                               spread_bps, max_spread_bps)};
 
-    if (vol_ratio < min_volume_ratio)
-      return {false, std::format("volume_too_low_{:.2f}x_min_{:.1f}x",
-                                 vol_ratio, min_volume_ratio)};
-
-    return {false, "failed_tradeability_check"};
-  }
+  if (vol_ratio < min_volume_ratio)
+    return {false, std::format("volume_too_low_{:.2f}x_min_{:.1f}x", vol_ratio,
+                               min_volume_ratio)};
 
   return {true, ""};
 }
