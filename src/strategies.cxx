@@ -369,14 +369,4 @@ double Strategies::calculate_volume_ratio(const PriceHistory& history) {
     return current_vol / avg;
 }
 
-// Check if trade is eligible based on spread and volume criteria
-bool Strategies::is_tradeable(const Snapshot& snap, const PriceHistory& history,
-                               double max_spread_bps, double min_volume_ratio) {
-    auto spread_bps = calculate_spread_bps(snap);
-    auto vol_ratio = calculate_volume_ratio(history);
-
-    // Block trade if spread too wide or volume too low
-    return spread_bps <= max_spread_bps and vol_ratio >= min_volume_ratio;
-}
-
 } // namespace lft
