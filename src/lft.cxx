@@ -834,6 +834,51 @@ static_assert(has_positive_edge(boundary_move, boundary_costs),
               "Exactly min_edge_bps net should pass");
 } // namespace
 
+// Entry decision logic - centralises all checks for opening new positions
+struct EntryDecision {
+  bool can_enter;
+  std::string block_reason;
+};
+
+// Check if we can enter a new position for this symbol
+// Returns decision with reason if blocked
+EntryDecision can_enter_position(
+    std::string_view symbol,
+    const std::set<std::string> &symbols_in_use,
+    const std::map<std::string, std::string> &position_strategies,
+    const lft::Snapshot &snap,
+    const lft::PriceHistory &history,
+    double max_spread_bps,
+    double min_volume_ratio) {
+
+  // Check 1: Already have open position or pending order?
+  if (symbols_in_use.contains(std::string{symbol}))
+    return {false, "existing_position_or_pending_order"};
+
+  // Check 2: Recently entered position (in-memory tracking)?
+  if (position_strategies.contains(std::string{symbol}))
+    return {false, "position_tracked_locally"};
+
+  // Check 3: Spread and volume acceptable?
+  if (not lft::Strategies::is_tradeable(snap, history, max_spread_bps,
+                                        min_volume_ratio)) {
+    auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
+    auto vol_ratio = lft::Strategies::calculate_volume_ratio(history);
+
+    if (spread_bps > max_spread_bps)
+      return {false, std::format("spread_too_wide_{:.1f}bps_max_{:.1f}bps",
+                                 spread_bps, max_spread_bps)};
+
+    if (vol_ratio < min_volume_ratio)
+      return {false, std::format("volume_too_low_{:.2f}x_min_{:.1f}x",
+                                 vol_ratio, min_volume_ratio)};
+
+    return {false, "failed_tradeability_check"};
+  }
+
+  return {true, ""};
+}
+
 void print_account_stats(lft::AlpacaClient &client,
                          const std::chrono::system_clock::time_point &now,
                          double &starting_equity,
@@ -1581,55 +1626,45 @@ void run_live_trading(
               ++strategy_stats[signal.strategy_name].signals_generated;
           }
 
-          // DUPLICATE ORDER PREVENTION: Two-layer guard
-          //
-          // Layer 1: symbols_in_use (populated from API each cycle)
-          //   - Contains symbols from /v2/positions and /v2/orders?status=open
-          //   - Protects against placing orders when API shows active positions/orders
-          //
-          // Layer 2: position_strategies (persistent in-memory map)
-          //   - Contains symbols we've placed orders for in this session
-          //   - Protected by 5-minute cleanup grace period (see lines 1280-1310)
-          //   - Critical for handling whatever timing issue caused 3 simultaneous ETH/USD
-          //     positions on 2026-01-13 (root cause still under investigation)
-          //
-          // Both checks required: API might have lag, but our local tracking is authoritative
-          if (not symbols_in_use.contains(symbol) and not position_strategies.contains(symbol)) {
-            // Execute first enabled signal
+          // Check if we can enter a position (centralised entry logic)
+          auto crypto = is_crypto(symbol);
+          auto max_spread = get_max_spread_bps(crypto);
+          auto entry_decision = can_enter_position(
+              symbol, symbols_in_use, position_strategies, snap, history,
+              max_spread, min_volume_ratio);
+
+          if (not entry_decision.can_enter) {
+            // Log why we can't enter
+            auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
+            auto vol_ratio = lft::Strategies::calculate_volume_ratio(history);
+
+            std::println("{}⛔ ENTRY BLOCKED: {} - {}{}", colour_yellow, symbol,
+                         entry_decision.block_reason, colour_reset);
+            std::println("   Spread: {:.1f} bps (max {:.1f}), Volume: {:.2f}x "
+                         "avg (min {:.1f}x)",
+                         spread_bps, max_spread, vol_ratio, min_volume_ratio);
+
+            // Find the signal that would have triggered (for logging)
+            auto triggering_signal =
+                std::ranges::find_if(signals, [&](const auto &sig) {
+                  return sig.should_buy and
+                         configs.contains(sig.strategy_name) and
+                         configs.at(sig.strategy_name).enabled;
+                });
+
+            if (triggering_signal != signals.end()) {
+              std::println("   Signal: {} - {}", triggering_signal->strategy_name,
+                           triggering_signal->reason);
+              log_blocked_trade(symbol, triggering_signal->strategy_name,
+                                triggering_signal->reason, spread_bps, max_spread,
+                                vol_ratio, min_volume_ratio, now);
+            }
+          } else {
+            // Can enter - execute first enabled signal
             for (const auto &signal : signals) {
               if (signal.should_buy and
                   configs.contains(signal.strategy_name) and
                   configs.at(signal.strategy_name).enabled) {
-
-                // Check trade eligibility (spread and volume filters)
-                auto crypto = is_crypto(symbol);
-                auto max_spread = get_max_spread_bps(crypto);
-
-                if (not lft::Strategies::is_tradeable(snap, history, max_spread,
-                                                      min_volume_ratio)) {
-                  auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
-                  auto vol_ratio =
-                      lft::Strategies::calculate_volume_ratio(history);
-
-                  std::println("{}⛔ TRADE BLOCKED: {}{}", colour_yellow,
-                               symbol, colour_reset);
-                  std::println("   Spread: {:.1f} bps (max {:.1f}), Volume: "
-                               "{:.3f}x avg (min {:.1f}x)",
-                               spread_bps, max_spread, vol_ratio,
-                               min_volume_ratio);
-                  std::println("   Quotes: bid={:.2f}, ask={:.2f}, mid={:.2f}",
-                               snap.latest_quote_bid, snap.latest_quote_ask,
-                               (snap.latest_quote_bid + snap.latest_quote_ask) / 2.0);
-                  std::println("   Signal: {} - {}", signal.strategy_name,
-                               signal.reason);
-
-                  // Log blocked trade
-                  log_blocked_trade(symbol, signal.strategy_name, signal.reason,
-                                    spread_bps, max_spread, vol_ratio,
-                                    min_volume_ratio, now);
-
-                  break; // Skip this trade and move to next symbol
-                }
 
                 // Check if trade has positive edge after costs
                 auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
@@ -1745,17 +1780,6 @@ void run_live_trading(
                 break; // One strategy per symbol
               }
             }
-          } else {
-            // Check if blocked by existing position
-            auto it = std::ranges::find_if(signals, [&](const auto &signal) {
-              return signal.should_buy and
-                     configs.contains(signal.strategy_name) and
-                     configs.at(signal.strategy_name).enabled;
-            });
-            if (it != signals.end())
-              std::println(
-                  "{}⏸  BLOCKED: {} signal for {} (position already open){}",
-                  colour_yellow, it->strategy_name, symbol, colour_reset);
           }
         }
       }
