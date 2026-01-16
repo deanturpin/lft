@@ -2,6 +2,8 @@
 
 A fully automated C++23 multi-strategy trading system for US equities and cryptocurrency, built on Alpaca Markets API.
 
+![Alpaca Markets](alpaca.png)
+
 ## Features
 
 ### Multi-Strategy Framework
