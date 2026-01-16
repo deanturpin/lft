@@ -35,3 +35,4 @@ Dockerfile
 docker-compose.yml
 
 backtest*.txt
+dry_run*.txt
