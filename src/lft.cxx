@@ -1690,15 +1690,13 @@ void run_live_trading(lft::AlpacaClient &client,
                 auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
                 auto total_cost_bps = calculate_total_cost_bps(spread_bps);
 
-                // Use expected move from config (calibrated), or signal, or
-                // default
+                // Use expected move from config (calibrated), or signal, or default
                 auto expected_move_bps =
                     configs.at(signal.strategy_name).expected_move_bps;
-                if (expected_move_bps <= 0.0) {
+                if (expected_move_bps <= 0.0)
                   expected_move_bps = signal.expected_move_bps > 0.0
                                           ? signal.expected_move_bps
                                           : total_cost_bps * 2.0;
-                }
 
                 if (not has_positive_edge(expected_move_bps, total_cost_bps)) {
                   auto net_edge_bps = expected_move_bps - total_cost_bps;
