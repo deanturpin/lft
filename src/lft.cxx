@@ -891,6 +891,59 @@ EntryDecision can_enter_position(
   return {true, ""};
 }
 
+// Build cooldown map from recently closed orders via API
+auto build_cooldown_map(lft::AlpacaClient &client,
+                        const std::chrono::system_clock::time_point &now) {
+  auto cooldowns = std::map<std::string, std::chrono::system_clock::time_point>{};
+
+  // Fetch recent closed orders (limit 100 - enough for current session)
+  auto orders_result = client.get_all_orders();
+  if (not orders_result)
+    return cooldowns;
+
+  auto orders_json =
+      nlohmann::json::parse(orders_result.value(), nullptr, false);
+  if (orders_json.is_discarded() or not orders_json.is_array())
+    return cooldowns;
+
+  // Find most recent sell order for each symbol
+  auto recent_sells = std::map<std::string, std::string>{}; // symbol -> filled_at
+
+  for (const auto &order : orders_json) {
+    if (order["status"].get<std::string>() != "filled")
+      continue;
+    if (order["side"].get<std::string>() != "sell")
+      continue;
+
+    auto symbol = order["symbol"].get<std::string>();
+    auto filled_at = order["filled_at"].get<std::string>();
+
+    // Keep only the most recent sell per symbol
+    if (not recent_sells.contains(symbol) or filled_at > recent_sells[symbol])
+      recent_sells[symbol] = filled_at;
+  }
+
+  // Convert to cooldown expiry times
+  for (const auto &[symbol, filled_at] : recent_sells) {
+    // Parse ISO 8601 timestamp (e.g., "2026-01-15T15:04:23.123456Z")
+    std::tm tm = {};
+    std::istringstream ss{filled_at};
+    ss >> std::get_time(&tm, "%Y-%m-%dT%H:%M:%S");
+
+    if (ss.fail())
+      continue;
+
+    auto exit_time = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+    auto cooldown_until = exit_time + std::chrono::minutes(lft::cooldown_minutes);
+
+    // Only add if cooldown hasn't expired yet
+    if (now < cooldown_until)
+      cooldowns[symbol] = cooldown_until;
+  }
+
+  return cooldowns;
+}
+
 void print_account_stats(
     lft::AlpacaClient &client, const std::chrono::system_clock::time_point &now,
     double &starting_equity, bool &starting_equity_captured
@@ -1095,8 +1148,6 @@ void run_live_trading(lft::AlpacaClient &client,
   auto position_order_ids = std::map<std::string, std::string>{};
   auto strategy_stats = std::map<std::string, lft::StrategyStats>{};
   auto api_positions = std::set<std::string>{}; // API is source of truth
-  auto symbol_cooldowns =
-      std::map<std::string, std::chrono::system_clock::time_point>{}; // Exit cooldown tracking
 
   // Initialise stats for ALL strategies (enabled and disabled)
   for (const auto &[name, config] : configs)
@@ -1171,6 +1222,9 @@ void run_live_trading(lft::AlpacaClient &client,
 
   for (auto cycle : std::views::iota(0, max_cycles)) {
     auto now = std::chrono::system_clock::now();
+
+    // Rebuild cooldown map from API each cycle
+    auto symbol_cooldowns = build_cooldown_map(client, now);
 
 #ifdef HAVE_FTXUI
     if (monitor)
@@ -1434,10 +1488,6 @@ void run_live_trading(lft::AlpacaClient &client,
               position_strategies.erase(symbol);
               position_peaks.erase(symbol);
               position_entry_times.erase(symbol);
-
-              // Start cooldown period for this symbol
-              symbol_cooldowns[symbol] =
-                  now + std::chrono::minutes(lft::cooldown_minutes);
             } else {
               std::println("   ❌ Failed to close {}", symbol);
             }
@@ -1512,10 +1562,6 @@ void run_live_trading(lft::AlpacaClient &client,
 
                 position_strategies.erase(symbol);
                 position_peaks.erase(symbol);
-
-                // Start cooldown period for this symbol
-                symbol_cooldowns[symbol] =
-                    now + std::chrono::minutes(lft::cooldown_minutes);
                 position_entry_times.erase(symbol);
               } else {
                 std::println("❌ Failed to close position: {}", symbol);
@@ -1588,11 +1634,6 @@ void run_live_trading(lft::AlpacaClient &client,
         position_peaks.erase(symbol);
         position_entry_times.erase(symbol);
         position_order_ids.erase(symbol);
-
-        // Start cooldown period for this symbol
-        symbol_cooldowns[symbol] =
-            now + std::chrono::minutes(lft::cooldown_minutes);
-
         it = position_strategies.erase(it);
       } else {
         ++it;

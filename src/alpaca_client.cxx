@@ -275,8 +275,8 @@ std::expected<std::string, AlpacaError> AlpacaClient::get_all_orders() {
   httplib::Headers headers = {{"APCA-API-KEY-ID", api_key_},
                               {"APCA-API-SECRET-KEY", api_secret_}};
 
-  // Get all orders (limit=500 is max per API documentation)
-  auto res = client.Get("/v2/orders?status=all&limit=500", headers);
+  // Get all orders (limit=100 - enough for position recovery and cooldown)
+  auto res = client.Get("/v2/orders?status=all&limit=100", headers);
 
   if (not res)
     return std::unexpected(AlpacaError::NetworkError);
