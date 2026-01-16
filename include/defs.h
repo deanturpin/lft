@@ -35,11 +35,12 @@ inline const auto stocks = std::vector<std::string>{
     "NVDA",  // NVIDIA - GPUs, AI chips
     "TSLA",  // Tesla - Electric vehicles, energy
     // International
-    "ASML", // EU semiconductors
-    "BABA", // China e-commerce
-    "NVO",  // Healthcare (Denmark)
-    "SAP",  // European software
-    "TSM",  // Taiwan Semiconductor
+    "ASML",  // EU semiconductors
+    "BABA",  // China e-commerce
+    "NVO",   // Healthcare (Denmark)
+    "SAP",   // European software
+    "TCAPF", // Tencent (China tech and gaming)
+    "TSM",   // Taiwan Semiconductor
     // US sectors
     "BRK.B", // Berkshire Hathaway (diversified value)
     "JNJ",   // Healthcare

@@ -840,7 +840,8 @@ void print_account_stats(lft::AlpacaClient &client,
                          bool &starting_equity_captured
 #ifdef HAVE_FTXUI
                          ,
-                         std::shared_ptr<tui::trading_monitor> monitor = nullptr
+                         std::shared_ptr<tui::trading_monitor> monitor = nullptr,
+                         bool tui_active = false
 #endif
 ) {
   auto account_result = client.get_account();
@@ -870,9 +871,13 @@ void print_account_stats(lft::AlpacaClient &client,
   if (not starting_equity_captured and equity > 0.0) {
     starting_equity = equity;
     starting_equity_captured = true;
-#ifndef HAVE_FTXUI
-    std::println("\n{}🚀 Session starting equity: ${:,.2f}{}", colour_cyan,
-                 starting_equity, colour_reset);
+#ifdef HAVE_FTXUI
+    if (not tui_active) {
+#endif
+      std::println("\n{}🚀 Session starting equity: ${{:,.2f}}{}", colour_cyan,
+                   starting_equity, colour_reset);
+#ifdef HAVE_FTXUI
+    }
 #endif
   }
   auto daytrading_buying_power =
@@ -894,70 +899,75 @@ void print_account_stats(lft::AlpacaClient &client,
 
 #ifdef HAVE_FTXUI
   // Update TUI with account info (estimate position count from long_market_value)
-  if (monitor) {
+  if (tui_active and monitor) {
     auto position_count =
         long_market_value > 0.0 ? static_cast<size_t>(long_market_value / 1000.0) : 0uz;
     monitor->update_account(equity, buying_power, position_count);
   }
-#else
-  std::println("\n💰 ACCOUNT STATUS");
-  std::println("{:-<70}", "");
 
-  // Session P&L (if captured)
-  if (starting_equity_captured) {
-    auto session_pnl = equity - starting_equity;
-    auto session_pnl_pct = (session_pnl / starting_equity) * 100.0;
-    auto pnl_colour = session_pnl > 0.0 ? colour_green
-                    : session_pnl < 0.0 ? colour_red
-                    : colour_reset;
-
-    std::println("Starting Equity:   ${:>12.2f}", starting_equity);
-    std::println("Current Equity:    ${:>12.2f}", equity);
-    std::println("{}Session P&L:       {:+>12.2f} ({:+.2f}%){}", pnl_colour,
-                 session_pnl, session_pnl_pct, colour_reset);
+  // Always show console output if TUI is not active
+  if (not tui_active) {
+#endif
+    std::println("\n💰 ACCOUNT STATUS");
     std::println("{:-<70}", "");
-  }
 
-  std::println("Cash:              ${:>12.2f}", cash);
-  std::println("Long Positions:    ${:>12.2f}", long_market_value);
-  std::println("Buying Power:      ${:>12.2f}", buying_power);
+    // Session P&L (if captured)
+    if (starting_equity_captured) {
+      auto session_pnl = equity - starting_equity;
+      auto session_pnl_pct = (session_pnl / starting_equity) * 100.0;
+      auto pnl_colour = session_pnl > 0.0 ? colour_green
+                      : session_pnl < 0.0 ? colour_red
+                      : colour_reset;
 
-  // Day trading buying power with warning
-  if (daytrading_buying_power <= 0.0) {
-    std::println("{}Day Trade BP:      ${:>12.2f}  ⚠️  EXHAUSTED{}", colour_red,
-                 daytrading_buying_power, colour_reset);
-  } else if (daytrading_buying_power < notional_amount) {
-    std::println("{}Day Trade BP:      ${:>12.2f}  ⚠️  LOW{}", colour_yellow,
-                 daytrading_buying_power, colour_reset);
-  } else {
-    std::println("Day Trade BP:      ${:>12.2f}", daytrading_buying_power);
-  }
+      std::println("Starting Equity:   ${:>12.2f}", starting_equity);
+      std::println("Current Equity:    ${:>12.2f}", equity);
+      std::println("{}Session P&L:       {:+>12.2f} ({:+.2f}%){}", pnl_colour,
+                   session_pnl, session_pnl_pct, colour_reset);
+      std::println("{:-<70}", "");
+    }
 
-  // Trading status
-  auto status_text = trading_blocked ? "BLOCKED" : "ACTIVE";
-  auto status_icon = trading_blocked ? "❌" : "✅";
-  auto trading_colour = trading_blocked ? colour_red : colour_green;
-  std::println("{}Trading Status:     {} {}{}", trading_colour, status_text,
-               status_icon, colour_reset);
+    std::println("Cash:              ${:>12.2f}", cash);
+    std::println("Long Positions:    ${:>12.2f}", long_market_value);
+    std::println("Buying Power:      ${:>12.2f}", buying_power);
 
-  // Market status
-  auto market_status = get_market_status(now);
-  auto market_colour = market_status.is_open ? colour_green : colour_red;
-  std::println("{}{}{}", market_colour, market_status.message, colour_reset);
+    // Day trading buying power with warning
+    if (daytrading_buying_power <= 0.0) {
+      std::println("{}Day Trade BP:      ${:>12.2f}  ⚠️  EXHAUSTED{}", colour_red,
+                   daytrading_buying_power, colour_reset);
+    } else if (daytrading_buying_power < notional_amount) {
+      std::println("{}Day Trade BP:      ${:>12.2f}  ⚠️  LOW{}", colour_yellow,
+                   daytrading_buying_power, colour_reset);
+    } else {
+      std::println("Day Trade BP:      ${:>12.2f}", daytrading_buying_power);
+    }
 
-  // Warnings
-  if (trading_blocked) {
-    std::println("{}❌ CRITICAL: Trading blocked - cannot place orders{}",
-                 colour_red, colour_reset);
-  }
-  if (daytrading_buying_power <= 0.0) {
-    std::println("{}⚠  WARNING: No day trading buying power - new positions "
-                 "may be rejected{}",
-                 colour_yellow, colour_reset);
-  }
-  if (cash < notional_amount) {
-    std::println("{}⚠  WARNING: Cash (${:.2f}) below trade size (${:.2f}){}",
-                 colour_yellow, cash, notional_amount, colour_reset);
+    // Trading status
+    auto status_text = trading_blocked ? "BLOCKED" : "ACTIVE";
+    auto status_icon = trading_blocked ? "❌" : "✅";
+    auto trading_colour = trading_blocked ? colour_red : colour_green;
+    std::println("{}Trading Status:     {} {}{}", trading_colour, status_text,
+                 status_icon, colour_reset);
+
+    // Market status
+    auto market_status = get_market_status(now);
+    auto market_colour = market_status.is_open ? colour_green : colour_red;
+    std::println("{}{}{}", market_colour, market_status.message, colour_reset);
+
+    // Warnings
+    if (trading_blocked) {
+      std::println("{}❌ CRITICAL: Trading blocked - cannot place orders{}",
+                   colour_red, colour_reset);
+    }
+    if (daytrading_buying_power <= 0.0) {
+      std::println("{}⚠  WARNING: No day trading buying power - new positions "
+                   "may be rejected{}",
+                   colour_yellow, colour_reset);
+    }
+    if (cash < notional_amount) {
+      std::println("{}⚠  WARNING: Cash (${:.2f}) below trade size (${:.2f}){}",
+                   colour_yellow, cash, notional_amount, colour_reset);
+    }
+#ifdef HAVE_FTXUI
   }
 #endif
 }
@@ -1163,7 +1173,7 @@ void run_live_trading(
 
     // Display account status
 #ifdef HAVE_FTXUI
-    print_account_stats(client, now, starting_equity, starting_equity_captured, monitor);
+    print_account_stats(client, now, starting_equity, starting_equity_captured, monitor, tui_active);
 #else
     print_account_stats(client, now, starting_equity, starting_equity_captured);
 #endif
@@ -1505,6 +1515,9 @@ void run_live_trading(
     auto start_str = std::format("{:%Y-%m-%dT%H:%M:%SZ}", bars_start);
     auto end_str = std::format("{:%Y-%m-%dT%H:%M:%SZ}", bars_end);
 
+    // Track last processed bar timestamp per symbol to avoid re-processing
+    static auto last_bar_timestamps = std::map<std::string, std::string>{};
+
     // Fetch 15-minute bars for all symbols
     for (const auto &symbol : stocks) {
       auto bars = client.get_bars(symbol, "15Min", start_str, end_str);
@@ -1517,10 +1530,16 @@ void run_live_trading(
           for (const auto &bar : *bars) {
             history.add_bar(bar.close, bar.high, bar.low, bar.volume);
           }
+          // Remember the last bar's timestamp
+          last_bar_timestamps[symbol] = bars->back().timestamp;
         } else {
-          // Subsequent cycles: only add new bars
+          // Subsequent cycles: only add bars we haven't seen before
+          auto last_timestamp = last_bar_timestamps[symbol];
           for (const auto &bar : *bars) {
-            history.add_bar(bar.close, bar.high, bar.low, bar.volume);
+            if (bar.timestamp > last_timestamp) {
+              history.add_bar(bar.close, bar.high, bar.low, bar.volume);
+              last_bar_timestamps[symbol] = bar.timestamp;
+            }
           }
         }
       }
@@ -1537,10 +1556,16 @@ void run_live_trading(
           for (const auto &bar : *bars) {
             history.add_bar(bar.close, bar.high, bar.low, bar.volume);
           }
+          // Remember the last bar's timestamp
+          last_bar_timestamps[symbol] = bars->back().timestamp;
         } else {
-          // Subsequent cycles: only add new bars
+          // Subsequent cycles: only add bars we haven't seen before
+          auto last_timestamp = last_bar_timestamps[symbol];
           for (const auto &bar : *bars) {
-            history.add_bar(bar.close, bar.high, bar.low, bar.volume);
+            if (bar.timestamp > last_timestamp) {
+              history.add_bar(bar.close, bar.high, bar.low, bar.volume);
+              last_bar_timestamps[symbol] = bar.timestamp;
+            }
           }
         }
       }
