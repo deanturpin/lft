@@ -23,34 +23,39 @@ echo "$portfolio_data" | jq -r '
   .equity as $equity |
   .timestamp as $ts |
 
-  # Calculate stats
-  ($equity | min) as $low |
-  ($equity | max) as $peak |
-  $equity[0] as $start |
-  $equity[-1] as $end |
+  # Check if we have data
+  if ($equity | length) == 0 then
+    "No portfolio history data available for today.\nThe market may not have opened yet, or no trades were made."
+  else
+    # Calculate stats
+    ($equity | min) as $low |
+    ($equity | max) as $peak |
+    $equity[0] as $start |
+    $equity[-1] as $end |
 
-  # Find indices
-  ($equity | to_entries | min_by(.value) | .key) as $low_idx |
-  ($equity | to_entries | max_by(.value) | .key) as $peak_idx |
+    # Find indices
+    ($equity | to_entries | min_by(.value) | .key) as $low_idx |
+    ($equity | to_entries | max_by(.value) | .key) as $peak_idx |
 
-  # Format timestamps
-  ($ts[$low_idx] | strftime("%H:%M ET")) as $low_time |
-  ($ts[$peak_idx] | strftime("%H:%M ET")) as $peak_time |
+    # Format timestamps
+    ($ts[$low_idx] | strftime("%H:%M ET")) as $low_time |
+    ($ts[$peak_idx] | strftime("%H:%M ET")) as $peak_time |
 
-  # Calculate changes
-  ($end - $start) as $session_pnl |
-  (($session_pnl / $start) * 100) as $session_pnl_pct |
-  ($peak - $start) as $peak_gain |
-  (($peak_gain / $start) * 100) as $peak_gain_pct |
-  ($end - $low) as $recovery |
+    # Calculate changes (handle zero start)
+    ($end - $start) as $session_pnl |
+    (if $start == 0 then 0 else (($session_pnl / $start) * 100) end) as $session_pnl_pct |
+    ($peak - $start) as $peak_gain |
+    (if $start == 0 then 0 else (($peak_gain / $start) * 100) end) as $peak_gain_pct |
+    ($end - $low) as $recovery |
 
-  "Starting Balance: $\($start | tonumber | . * 100 | round / 100)
+    "Starting Balance: $\($start | tonumber | . * 100 | round / 100)
 Current Balance:  $\($end | tonumber | . * 100 | round / 100)
 Session P&L:      $\($session_pnl | tonumber | . * 100 | round / 100) (\($session_pnl_pct | tonumber | . * 100 | round / 100)%)
 
 Peak:    $\($peak | tonumber | . * 100 | round / 100) at \($peak_time) (+$\($peak_gain | tonumber | . * 100 | round / 100), +\($peak_gain_pct | tonumber | . * 100 | round / 100)%)
 Low:     $\($low | tonumber | . * 100 | round / 100) at \($low_time)
 Recovery: $\($recovery | tonumber | . * 100 | round / 100) from low to close"
+  end
 '
 
 echo ""
