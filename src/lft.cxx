@@ -5,18 +5,23 @@
 //
 // 1. NON-UNIQUE client_order_id (Lines 77-93):
 //    - Bug: All orders for same strategy/params had identical client_order_id
-//    - Symptom: Alpaca rejected with "client_order_id must be unique" (error 40010001)
+//    - Symptom: Alpaca rejected with "client_order_id must be unique" (error
+//    40010001)
 //    - Fix: Include symbol + millisecond timestamp in client_order_id
 //    - Format: "TLT_momentum_1768317100944|tp:2.0|sl:-5.0|ts:30.0"
 //
 // 2. AGGRESSIVE CLEANUP LOOP (Lines 1280-1310):
-//    - Bug: Cleanup erased symbols from position_strategies if not in API response
-//    - Root cause: Unknown - API lag, race condition, or timing issue (under investigation)
-//    - Symptom: 3 simultaneous ETH/USD positions at 15:11:41, 15:12:39, 15:13:38
+//    - Bug: Cleanup erased symbols from position_strategies if not in API
+//    response
+//    - Root cause: Unknown - API lag, race condition, or timing issue (under
+//    investigation)
+//    - Symptom: 3 simultaneous ETH/USD positions at 15:11:41, 15:12:39,
+//    15:13:38
 //    - Fix: 5-minute grace period - don't erase recently entered symbols
 //
 // 3. MISSING DUPLICATE GUARDS (Lines 1331-1343, 1457, 1468):
-//    - Bug: Only checked symbols_in_use (from API), not persistent position_strategies
+//    - Bug: Only checked symbols_in_use (from API), not persistent
+//    position_strategies
 //    - Fix: Two-layer check: symbols_in_use AND position_strategies
 //    - Also: Immediately add symbol to symbols_in_use after order placement
 //
@@ -106,20 +111,22 @@ struct MarketStatus {
 // Encode trading parameters into client_order_id (max 48 chars)
 // Includes symbol and timestamp to ensure uniqueness across orders
 std::string encode_client_order_id(std::string_view strategy,
-                                    std::string_view symbol,
-                                    double take_profit_pct, double stop_loss_pct,
-                                    double trailing_stop_pct) {
+                                   std::string_view symbol,
+                                   double take_profit_pct, double stop_loss_pct,
+                                   double trailing_stop_pct) {
   // Get timestamp in milliseconds since epoch
   auto now = std::chrono::system_clock::now();
   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-      now.time_since_epoch()).count();
+                now.time_since_epoch())
+                .count();
 
   // Format: "SYM_strategy_ms" (symbol ensures uniqueness per ticker)
-  // Keep it under 48 chars: symbol(5) + strategy(10) + timestamp(13) + separators = ~30 chars
-  // Convert fractions to percentages for display (0.02 -> 2.0)
-  return std::format("{}_{}_{}|tp:{:.1f}|sl:{:.1f}|ts:{:.1f}",
-                     symbol, strategy, ms,
-                     take_profit_pct * 100.0, stop_loss_pct * 100.0, trailing_stop_pct * 100.0);
+  // Keep it under 48 chars: symbol(5) + strategy(10) + timestamp(13) +
+  // separators = ~30 chars Convert fractions to percentages for display (0.02
+  // -> 2.0)
+  return std::format("{}_{}_{}|tp:{:.1f}|sl:{:.1f}|ts:{:.1f}", symbol, strategy,
+                     ms, take_profit_pct * 100.0, stop_loss_pct * 100.0,
+                     trailing_stop_pct * 100.0);
 }
 
 // Decode client_order_id back to strategy name
@@ -142,7 +149,8 @@ std::string decode_strategy(std::string_view client_order_id) {
     return std::string{id_part.substr(first_under + 1)}; // "strategy_timestamp"
 
   // Return just the strategy name (between first and second underscore)
-  return std::string{id_part.substr(first_under + 1, second_under - first_under - 1)};
+  return std::string{
+      id_part.substr(first_under + 1, second_under - first_under - 1)};
 }
 
 // Check if US stock market is open and time until open/close
@@ -763,15 +771,14 @@ void print_snapshot(const std::string &symbol, const lft::Snapshot &snap,
   // Format bid/ask/spread with --- for invalid quotes
   if (valid_quotes)
     std::println(
-        "{}{:<10} {:>12.2f} {:>12.2f} {:>12.2f} {:>9.2f}% {:>7.3f}% {}{}", colour,
-        symbol, snap.latest_trade_price, snap.latest_quote_bid,
+        "{}{:<10} {:>12.2f} {:>12.2f} {:>12.2f} {:>9.2f}% {:>7.3f}% {}{}",
+        colour, symbol, snap.latest_trade_price, snap.latest_quote_bid,
         snap.latest_quote_ask, history.change_percent, spread_pct, status,
         colour_reset);
   else
-    std::println(
-        "{}{:<10} {:>12.2f} {:>12} {:>12} {:>9.2f}% {:>8} {}{}", colour,
-        symbol, snap.latest_trade_price, "---", "---",
-        history.change_percent, "---", status, colour_reset);
+    std::println("{}{:<10} {:>12.2f} {:>12} {:>12} {:>9.2f}% {:>8} {}{}",
+                 colour, symbol, snap.latest_trade_price, "---", "---",
+                 history.change_percent, "---", status, colour_reset);
 }
 
 // Calculate total estimated costs for a trade in basis points
@@ -843,13 +850,10 @@ struct EntryDecision {
 // Check if we can enter a new position for this symbol
 // Returns decision with reason if blocked
 EntryDecision can_enter_position(
-    std::string_view symbol,
-    const std::set<std::string> &symbols_in_use,
+    std::string_view symbol, const std::set<std::string> &symbols_in_use,
     const std::map<std::string, std::string> &position_strategies,
-    const lft::Snapshot &snap,
-    const lft::PriceHistory &history,
-    double max_spread_bps,
-    double min_volume_ratio) {
+    const lft::Snapshot &snap, const lft::PriceHistory &history,
+    double max_spread_bps, double min_volume_ratio) {
 
   // Check 1: Already have open position or pending order?
   if (symbols_in_use.contains(std::string{symbol}))
@@ -860,14 +864,12 @@ EntryDecision can_enter_position(
     return {false, "position_tracked_locally"};
 
   // Check 3: Spread and volume acceptable?
-  // Calculate once and check inline to avoid redundant calculations
   auto spread_bps = lft::Strategies::calculate_spread_bps(snap);
-  auto vol_ratio = lft::Strategies::calculate_volume_ratio(history);
-
   if (spread_bps > max_spread_bps)
     return {false, std::format("spread_too_wide_{:.1f}bps_max_{:.1f}bps",
                                spread_bps, max_spread_bps)};
 
+  auto vol_ratio = lft::Strategies::calculate_volume_ratio(history);
   if (vol_ratio < min_volume_ratio)
     return {false, std::format("volume_too_low_{:.2f}x_min_{:.1f}x", vol_ratio,
                                min_volume_ratio)};
@@ -875,14 +877,13 @@ EntryDecision can_enter_position(
   return {true, ""};
 }
 
-void print_account_stats(lft::AlpacaClient &client,
-                         const std::chrono::system_clock::time_point &now,
-                         double &starting_equity,
-                         bool &starting_equity_captured
+void print_account_stats(
+    lft::AlpacaClient &client, const std::chrono::system_clock::time_point &now,
+    double &starting_equity, bool &starting_equity_captured
 #ifdef HAVE_FTXUI
-                         ,
-                         std::shared_ptr<tui::trading_monitor> monitor = nullptr,
-                         bool tui_active = false
+    ,
+    std::shared_ptr<tui::trading_monitor> monitor = nullptr,
+    bool tui_active = false
 #endif
 ) {
   auto account_result = client.get_account();
@@ -895,9 +896,10 @@ void print_account_stats(lft::AlpacaClient &client,
     return;
 
   // Extract account fields with null checks
-  auto cash = (account_json.contains("cash") and not account_json["cash"].is_null())
-                  ? std::stod(account_json["cash"].get<std::string>())
-                  : 0.0;
+  auto cash =
+      (account_json.contains("cash") and not account_json["cash"].is_null())
+          ? std::stod(account_json["cash"].get<std::string>())
+          : 0.0;
   auto buying_power =
       (account_json.contains("buying_power") and
        not account_json["buying_power"].is_null())
@@ -932,17 +934,18 @@ void print_account_stats(lft::AlpacaClient &client,
        not account_json["long_market_value"].is_null())
           ? std::stod(account_json["long_market_value"].get<std::string>())
           : 0.0;
-  auto trading_blocked =
-      (account_json.contains("trading_blocked") and
-       not account_json["trading_blocked"].is_null())
-          ? account_json["trading_blocked"].get<bool>()
-          : false;
+  auto trading_blocked = (account_json.contains("trading_blocked") and
+                          not account_json["trading_blocked"].is_null())
+                             ? account_json["trading_blocked"].get<bool>()
+                             : false;
 
 #ifdef HAVE_FTXUI
-  // Update TUI with account info (estimate position count from long_market_value)
+  // Update TUI with account info (estimate position count from
+  // long_market_value)
   if (tui_active and monitor) {
-    auto position_count =
-        long_market_value > 0.0 ? static_cast<size_t>(long_market_value / 1000.0) : 0uz;
+    auto position_count = long_market_value > 0.0
+                              ? static_cast<size_t>(long_market_value / 1000.0)
+                              : 0uz;
     monitor->update_account(equity, buying_power, position_count);
   }
 
@@ -956,9 +959,9 @@ void print_account_stats(lft::AlpacaClient &client,
     if (starting_equity_captured) {
       auto session_pnl = equity - starting_equity;
       auto session_pnl_pct = (session_pnl / starting_equity) * 100.0;
-      auto pnl_colour = session_pnl > 0.0 ? colour_green
-                      : session_pnl < 0.0 ? colour_red
-                      : colour_reset;
+      auto pnl_colour = session_pnl > 0.0   ? colour_green
+                        : session_pnl < 0.0 ? colour_red
+                                            : colour_reset;
 
       std::println("Starting Equity:   ${:>12.2f}", starting_equity);
       std::println("Current Equity:    ${:>12.2f}", equity);
@@ -973,8 +976,8 @@ void print_account_stats(lft::AlpacaClient &client,
 
     // Day trading buying power with warning
     if (daytrading_buying_power <= 0.0) {
-      std::println("{}Day Trade BP:      ${:>12.2f}  ⚠️  EXHAUSTED{}", colour_red,
-                   daytrading_buying_power, colour_reset);
+      std::println("{}Day Trade BP:      ${:>12.2f}  ⚠️  EXHAUSTED{}",
+                   colour_red, daytrading_buying_power, colour_reset);
     } else if (daytrading_buying_power < notional_amount) {
       std::println("{}Day Trade BP:      ${:>12.2f}  ⚠️  LOW{}", colour_yellow,
                    daytrading_buying_power, colour_reset);
@@ -1012,7 +1015,6 @@ void print_account_stats(lft::AlpacaClient &client,
   }
 #endif
 }
-
 
 void log_blocked_trade(
     std::string_view symbol, std::string_view strategy,
@@ -1054,14 +1056,14 @@ void log_blocked_trade(
 }
 
 // Live trading loop
-void run_live_trading(
-    lft::AlpacaClient &client, const std::vector<std::string> &stocks,
-    const std::vector<std::string> &crypto,
-    const std::map<std::string, lft::StrategyConfig> &configs
+void run_live_trading(lft::AlpacaClient &client,
+                      const std::vector<std::string> &stocks,
+                      const std::vector<std::string> &crypto,
+                      const std::map<std::string, lft::StrategyConfig> &configs
 #ifdef HAVE_FTXUI
-    ,
-    std::shared_ptr<tui::trading_monitor> monitor = nullptr,
-    bool tui_active = false
+                      ,
+                      std::shared_ptr<tui::trading_monitor> monitor = nullptr,
+                      bool tui_active = false
 #endif
 ) {
 
@@ -1095,7 +1097,8 @@ void run_live_trading(
 
   // Startup: recover open positions from order history
 #ifndef HAVE_FTXUI
-  std::println("\n{}🔄 Recovering positions from API...{}", colour_cyan, colour_reset);
+  std::println("\n{}🔄 Recovering positions from API...{}", colour_cyan,
+               colour_reset);
 #endif
   auto all_orders_result = client.get_all_orders();
   if (all_orders_result) {
@@ -1109,8 +1112,8 @@ void run_live_trading(
         auto positions_json =
             nlohmann::json::parse(positions_result.value(), nullptr, false);
 
-        if (not positions_json.is_discarded() and
-            positions_json.is_array() and not positions_json.empty()) {
+        if (not positions_json.is_discarded() and positions_json.is_array() and
+            not positions_json.empty()) {
 
           std::println("\n   Recovering {} open positions...",
                        positions_json.size());
@@ -1171,15 +1174,22 @@ void run_live_trading(
     auto et_now = now + et_offset;
     auto et_time_t = std::chrono::system_clock::to_time_t(et_now);
     auto et_tm = std::gmtime(&et_time_t);
-    auto current_time = std::chrono::hours{et_tm->tm_hour} + std::chrono::minutes{et_tm->tm_min};
+    auto current_time = std::chrono::hours{et_tm->tm_hour} +
+                        std::chrono::minutes{et_tm->tm_min};
 
     // Market hours: 9:30 AM - 4:00 PM ET
-    constexpr auto market_open = std::chrono::hours{9} + std::chrono::minutes{30};
+    constexpr auto market_open =
+        std::chrono::hours{9} + std::chrono::minutes{30};
     constexpr auto market_close = std::chrono::hours{16}; // 4:00 PM ET
-    constexpr auto eod_cutoff = market_close - std::chrono::minutes{3}; // Stop trading and start liquidation at 3:57 PM ET
+    constexpr auto eod_cutoff =
+        market_close -
+        std::chrono::minutes{
+            3}; // Stop trading and start liquidation at 3:57 PM ET
 
-    auto is_market_hours = current_time >= market_open and current_time < eod_cutoff;
-    auto force_eod_close = current_time >= eod_cutoff and current_time < market_close;
+    auto is_market_hours =
+        current_time >= market_open and current_time < eod_cutoff;
+    auto force_eod_close =
+        current_time >= eod_cutoff and current_time < market_close;
 
     // Show market hours status
 #ifdef HAVE_FTXUI
@@ -1187,19 +1197,17 @@ void run_live_trading(
       auto is_open = is_market_hours and not force_eod_close;
       std::string countdown;
       if (current_time < market_open) {
-        auto mins_to_open =
-            std::chrono::duration_cast<std::chrono::minutes>(market_open -
-                                                              current_time)
-                .count();
+        auto mins_to_open = std::chrono::duration_cast<std::chrono::minutes>(
+                                market_open - current_time)
+                                .count();
         countdown = std::format("Opens in {}h {}m", mins_to_open / 60,
                                 mins_to_open % 60);
       } else if (force_eod_close) {
         countdown = "Liquidating positions";
       } else {
-        auto mins_to_close =
-            std::chrono::duration_cast<std::chrono::minutes>(market_close -
-                                                              current_time)
-                .count();
+        auto mins_to_close = std::chrono::duration_cast<std::chrono::minutes>(
+                                 market_close - current_time)
+                                 .count();
         countdown = std::format("Closes in {}h {}m", mins_to_close / 60,
                                 mins_to_close % 60);
       }
@@ -1207,14 +1215,19 @@ void run_live_trading(
     }
 #else
     if (current_time < market_open or current_time >= market_close)
-      std::println("{}⏸️  OUTSIDE MARKET HOURS (9:30 AM - 4:00 PM ET) - No new trades{}\n", colour_yellow, colour_reset);
+      std::println("{}⏸️  OUTSIDE MARKET HOURS (9:30 AM - 4:00 PM ET) - No new "
+                   "trades{}\n",
+                   colour_yellow, colour_reset);
     else if (force_eod_close)
-      std::println("{}🔔 END OF DAY LIQUIDATION (3:57 PM ET) - Closing all positions{}\n", colour_yellow, colour_reset);
+      std::println("{}🔔 END OF DAY LIQUIDATION (3:57 PM ET) - Closing all "
+                   "positions{}\n",
+                   colour_yellow, colour_reset);
 #endif
 
     // Display account status
 #ifdef HAVE_FTXUI
-    print_account_stats(client, now, starting_equity, starting_equity_captured, monitor, tui_active);
+    print_account_stats(client, now, starting_equity, starting_equity_captured,
+                        monitor, tui_active);
 #else
     print_account_stats(client, now, starting_equity, starting_equity_captured);
 #endif
@@ -1246,10 +1259,10 @@ void run_live_trading(
 #endif
             std::println("\n📊 OPEN POSITIONS");
             std::println("{:-<130}", "");
-            std::println(
-                "{:<10} {:>18} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10}",
-                "SYMBOL", "QTY", "ENTRY", "CURRENT", "TARGET", "VALUE", "P&L",
-                "P&L %", "TGT %");
+            std::println("{:<10} {:>18} {:>10} {:>10} {:>10} {:>10} {:>10} "
+                         "{:>10} {:>10}",
+                         "SYMBOL", "QTY", "ENTRY", "CURRENT", "TARGET", "VALUE",
+                         "P&L", "P&L %", "TGT %");
             std::println("{:-<130}", "");
 #ifdef HAVE_FTXUI
           }
@@ -1261,12 +1274,16 @@ void run_live_trading(
             positions_vec.push_back(pos);
 
           std::ranges::sort(positions_vec, [](const auto &a, const auto &b) {
-            auto entry_a = std::stod(a["avg_entry_price"].template get<std::string>());
-            auto current_a = std::stod(a["current_price"].template get<std::string>());
+            auto entry_a =
+                std::stod(a["avg_entry_price"].template get<std::string>());
+            auto current_a =
+                std::stod(a["current_price"].template get<std::string>());
             auto plpc_a = ((current_a - entry_a) / entry_a) * 100.0;
 
-            auto entry_b = std::stod(b["avg_entry_price"].template get<std::string>());
-            auto current_b = std::stod(b["current_price"].template get<std::string>());
+            auto entry_b =
+                std::stod(b["avg_entry_price"].template get<std::string>());
+            auto current_b =
+                std::stod(b["current_price"].template get<std::string>());
             auto plpc_b = ((current_b - entry_b) / entry_b) * 100.0;
 
             return plpc_a > plpc_b; // Descending order (best first)
@@ -1350,7 +1367,8 @@ void run_live_trading(
 #ifdef HAVE_FTXUI
           if (not tui_active) {
 #endif
-            std::println("\n{}📭 No open positions{}", colour_cyan, colour_reset);
+            std::println("\n{}📭 No open positions{}", colour_cyan,
+                         colour_reset);
 #ifdef HAVE_FTXUI
           }
 #endif
@@ -1358,7 +1376,8 @@ void run_live_trading(
 
         // Check if we need to close all positions before market close
         if (not positions_json.empty() and force_eod_close) {
-          std::println("\n{}⏰ END OF DAY: Closing all positions (market closes in 5 minutes){}",
+          std::println("\n{}⏰ END OF DAY: Closing all positions (market "
+                       "closes in 5 minutes){}",
                        colour_yellow, colour_reset);
 
           for (const auto &pos : positions_json) {
@@ -1506,24 +1525,27 @@ void run_live_trading(
       }
     }
 
-    // Clean up position_strategies: remove entries that don't have actual positions
-    // BUT keep recent entries to prevent duplicate orders during API lag
+    // Clean up position_strategies: remove entries that don't have actual
+    // positions BUT keep recent entries to prevent duplicate orders during API
+    // lag
     //
-    // CRITICAL BUG PREVENTION: Protection against duplicate orders due to API/timing issues.
-    // Observed behaviour: 3 ETH/USD orders placed 58-59 seconds apart created simultaneous positions.
-    // Root cause unknown - could be:
+    // CRITICAL BUG PREVENTION: Protection against duplicate orders due to
+    // API/timing issues. Observed behaviour: 3 ETH/USD orders placed 58-59
+    // seconds apart created simultaneous positions. Root cause unknown - could
+    // be:
     //   - Alpaca API lag in /v2/positions endpoint
     //   - Race condition in our order/position tracking
     //   - Network timing issues
     //   - Something else we haven't identified yet
     //
-    // During this lag window, if we erase from position_strategies, the symbol appears
-    // "available" and we place duplicate orders. This created 3 simultaneous ETH/USD
-    // positions on 2026-01-13 at 15:11:41, 15:12:39, and 15:13:38 (58-59 seconds apart).
+    // During this lag window, if we erase from position_strategies, the symbol
+    // appears "available" and we place duplicate orders. This created 3
+    // simultaneous ETH/USD positions on 2026-01-13 at 15:11:41, 15:12:39, and
+    // 15:13:38 (58-59 seconds apart).
     //
-    // SOLUTION: Keep entries in position_strategies for 5 minutes after entry, regardless
-    // of API state. This prevents rapid duplicate orders while still cleaning up stale
-    // entries from rejected/canceled orders eventually.
+    // SOLUTION: Keep entries in position_strategies for 5 minutes after entry,
+    // regardless of API state. This prevents rapid duplicate orders while still
+    // cleaning up stale entries from rejected/canceled orders eventually.
     //
     // TODO: Consider these improvements:
     //   - Increase to 30-60 minute window for stronger protection
@@ -1531,10 +1553,11 @@ void run_live_trading(
     //   - Add "max trades per symbol per session" hard limit
     //   - Track all orders in SQLite database for audit trail
     auto five_minutes_ago = now - std::chrono::minutes{5};
-    for (auto it = position_strategies.begin(); it != position_strategies.end();) {
+    for (auto it = position_strategies.begin();
+         it != position_strategies.end();) {
       auto symbol = it->first;
       auto recently_entered = position_entry_times.contains(symbol) and
-                             position_entry_times[symbol] > five_minutes_ago;
+                              position_entry_times[symbol] > five_minutes_ago;
 
       // Only erase if position doesn't exist AND wasn't recently entered
       if (not api_positions.contains(symbol) and not recently_entered) {
@@ -1548,11 +1571,13 @@ void run_live_trading(
     }
 
     // Fetch market data - 15-minute bars for strategy signals
-    // On first cycle, fetch last 20 bars (5 hours). After that, only fetch latest 2 bars.
+    // On first cycle, fetch last 20 bars (5 hours). After that, only fetch
+    // latest 2 bars.
     auto is_first_cycle = price_histories.empty();
     auto bars_end = now;
-    auto bars_start = is_first_cycle ? now - std::chrono::hours{5}
-                                     : now - std::chrono::minutes{30};  // Just last 2 bars
+    auto bars_start = is_first_cycle
+                          ? now - std::chrono::hours{5}
+                          : now - std::chrono::minutes{30}; // Just last 2 bars
     auto start_str = std::format("{:%Y-%m-%dT%H:%M:%SZ}", bars_start);
     auto end_str = std::format("{:%Y-%m-%dT%H:%M:%SZ}", bars_end);
 
@@ -1623,11 +1648,10 @@ void run_live_trading(
           }
 
           // Check if we can enter a position (centralised entry logic)
-          auto crypto = is_crypto(symbol);
-          auto max_spread = get_max_spread_bps(crypto);
-          auto entry_decision = can_enter_position(
-              symbol, symbols_in_use, position_strategies, snap, history,
-              max_spread, min_volume_ratio);
+          // Only trading stocks now - use stock spread threshold
+          auto entry_decision =
+              can_enter_position(symbol, symbols_in_use, position_strategies,
+                                 snap, history, max_spread_bps_stocks, min_volume_ratio);
 
           if (not entry_decision.can_enter) {
             // Log why we can't enter
@@ -1638,7 +1662,7 @@ void run_live_trading(
                          entry_decision.block_reason, colour_reset);
             std::println("   Spread: {:.1f} bps (max {:.1f}), Volume: {:.2f}x "
                          "avg (min {:.1f}x)",
-                         spread_bps, max_spread, vol_ratio, min_volume_ratio);
+                         spread_bps, max_spread_bps_stocks, vol_ratio, min_volume_ratio);
 
             // Find the signal that would have triggered (for logging)
             auto triggering_signal =
@@ -1649,11 +1673,12 @@ void run_live_trading(
                 });
 
             if (triggering_signal != signals.end()) {
-              std::println("   Signal: {} - {}", triggering_signal->strategy_name,
+              std::println("   Signal: {} - {}",
+                           triggering_signal->strategy_name,
                            triggering_signal->reason);
               log_blocked_trade(symbol, triggering_signal->strategy_name,
-                                triggering_signal->reason, spread_bps, max_spread,
-                                vol_ratio, min_volume_ratio, now);
+                                triggering_signal->reason, spread_bps,
+                                max_spread_bps_stocks, vol_ratio, min_volume_ratio, now);
             }
           } else {
             // Can enter - execute first enabled signal
@@ -1696,7 +1721,7 @@ void run_live_trading(
                       lft::Strategies::calculate_volume_ratio(history);
 
                   log_blocked_trade(symbol, signal.strategy_name, signal.reason,
-                                    spread_bps, max_spread, vol_ratio,
+                                    spread_bps, max_spread_bps_stocks, vol_ratio,
                                     min_volume_ratio, now);
 
                   break; // Skip this trade and move to next symbol
@@ -1712,12 +1737,13 @@ void run_live_trading(
                 std::println("   Buying ${:.0f} of {}...", notional_amount,
                              symbol);
 
-                // Encode strategy and exit params in client_order_id (includes symbol and timestamp for uniqueness)
-                auto client_order_id =
-                    encode_client_order_id(signal.strategy_name, symbol,
-                                           take_profit_pct, stop_loss_pct, trailing_stop_pct);
-                auto order =
-                    client.place_order(symbol, "buy", notional_amount, client_order_id);
+                // Encode strategy and exit params in client_order_id (includes
+                // symbol and timestamp for uniqueness)
+                auto client_order_id = encode_client_order_id(
+                    signal.strategy_name, symbol, take_profit_pct,
+                    stop_loss_pct, trailing_stop_pct);
+                auto order = client.place_order(symbol, "buy", notional_amount,
+                                                client_order_id);
                 if (order) {
                   // Parse order response to verify status
                   auto order_json =
@@ -1739,9 +1765,10 @@ void run_live_trading(
                       position_entry_times[symbol] = now;
                       position_order_ids[symbol] = order_id;
 
-                      // WITHIN-CYCLE PROTECTION: Immediately add to symbols_in_use
-                      // If multiple strategies fire in the same cycle (before next API refresh),
-                      // this prevents placing duplicate orders for the same symbol
+                      // WITHIN-CYCLE PROTECTION: Immediately add to
+                      // symbols_in_use If multiple strategies fire in the same
+                      // cycle (before next API refresh), this prevents placing
+                      // duplicate orders for the same symbol
                       symbols_in_use.insert(symbol);
 
                       ++strategy_stats[signal.strategy_name].trades_executed;
@@ -1755,7 +1782,8 @@ void run_live_trading(
                     position_strategies[symbol] = signal.strategy_name;
                     position_entry_times[symbol] = now;
 
-                    // WITHIN-CYCLE PROTECTION: Immediately add to symbols_in_use
+                    // WITHIN-CYCLE PROTECTION: Immediately add to
+                    // symbols_in_use
                     symbols_in_use.insert(symbol);
 
                     ++strategy_stats[signal.strategy_name].trades_executed;
@@ -1783,8 +1811,8 @@ void run_live_trading(
 
     // Crypto trading removed 2026-01-16
     // Reason: All crypto pairs disabled due to duplicate order bug (2026-01-13)
-    // Simplifies codebase and eliminates code duplication between stock/crypto loops
-    // Can restore from git history when crypto trading is re-enabled
+    // Simplifies codebase and eliminates code duplication between stock/crypto
+    // loops Can restore from git history when crypto trading is re-enabled
 
     // Sleep until :35 past next minute (after Alpaca's :30 bar recalculation)
     auto next_update = std::chrono::ceil<std::chrono::minutes>(now) + 35s;
@@ -1837,7 +1865,8 @@ int main() {
 
   // Phase 2: Live trading (runs for 1 hour, then exits)
 #ifdef HAVE_FTXUI
-  run_live_trading(client, stocks, crypto, configs, monitor, renderer != nullptr);
+  run_live_trading(client, stocks, crypto, configs, monitor,
+                   renderer != nullptr);
 #else
   run_live_trading(client, stocks, crypto, configs);
 #endif
