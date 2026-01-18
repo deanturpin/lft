@@ -18,6 +18,14 @@ constexpr auto trailing_stop_pct = 0.30;  // 30%
 constexpr auto starting_capital = 100000.0;
 constexpr auto notional_per_trade = 1000.0;
 
+// Persistent position tracking state (across function calls)
+namespace {
+auto position_strategies = std::map<std::string, std::string>{};  // symbol -> strategy name
+auto position_peaks = std::map<std::string, double>{};            // symbol -> peak price for trailing stop
+auto position_entry_times = std::map<std::string, std::chrono::system_clock::time_point>{};
+auto symbol_cooldowns = std::map<std::string, std::chrono::system_clock::time_point>{}; // symbol -> cooldown until
+} // namespace
+
 // ═══════════════════════════════════════════════════════════════════════
 // DATA FETCHING AND ASSESSMENT
 // ═══════════════════════════════════════════════════════════════════════
@@ -280,22 +288,99 @@ void evaluate_entries(AlpacaClient &client,
                       std::chrono::system_clock::time_point now) {
   // Fetch current positions to avoid duplicate entries
   const auto positions = client.get_positions();
-  auto position_symbols = std::set<std::string>{};
+  auto symbols_in_use = std::set<std::string>{};
 
   for (const auto &pos : positions)
-    position_symbols.insert(pos.symbol);
+    symbols_in_use.insert(pos.symbol);
 
   // Evaluate each watchlist symbol
   for (const auto &symbol : stocks) {
-    // Skip if already in position
-    if (position_symbols.contains(symbol))
+    // Skip if already in position (from API or our tracking)
+    if (symbols_in_use.contains(symbol) or position_strategies.contains(symbol))
       continue;
 
-    // Fetch latest bar data
-    if (auto bars = client.get_bars(symbol, "15Min", 100)) {
-      // TODO: Evaluate strategies and place orders
-      // For now, just log that we checked
-      std::println("  Evaluated {} (no signal)", symbol);
+    // Skip if in cooldown period
+    if (symbol_cooldowns.contains(symbol) and now < symbol_cooldowns[symbol])
+      continue;
+
+    // Fetch latest bar data and snapshot
+    auto bars_opt = client.get_bars(symbol, "15Min", 100);
+    auto snapshot_opt = client.get_snapshot(symbol);
+
+    if (not bars_opt or not snapshot_opt)
+      continue;
+
+    const auto &bars = *bars_opt;
+    const auto &snapshot = *snapshot_opt;
+
+    // Check spread filter
+    const auto spread_bps = ((snapshot.latest_quote_ask - snapshot.latest_quote_bid) /
+                             snapshot.latest_quote_bid) * 10000.0;
+    if (spread_bps > max_spread_bps_stocks) {
+      std::println("  {} - spread too wide ({:.1f} bps)", symbol, spread_bps);
+      continue;
+    }
+
+    // Check volume filter (current volume vs 20-bar average)
+    if (bars.size() >= 20) {
+      auto total_volume = 0.0;
+      for (auto i = bars.size() - 20; i < bars.size(); ++i)
+        total_volume += bars[i].volume;
+      const auto avg_volume = total_volume / 20.0;
+      const auto current_volume = bars.back().volume;
+      const auto volume_ratio = current_volume / avg_volume;
+
+      if (volume_ratio < min_volume_ratio) {
+        std::println("  {} - low volume ({:.1f}% of average)", symbol, volume_ratio * 100.0);
+        continue;
+      }
+    }
+
+    // Convert bars to PriceHistory
+    auto history = lft::PriceHistory{};
+    for (const auto &bar : bars)
+      history.add_bar(bar.close, bar.high, bar.low, bar.volume);
+
+    // Evaluate all strategies
+    auto signals = std::vector<lft::StrategySignal>{
+        lft::Strategies::evaluate_ma_crossover(history),
+        lft::Strategies::evaluate_mean_reversion(history),
+        lft::Strategies::evaluate_volatility_breakout(history),
+        lft::Strategies::evaluate_relative_strength(history, {}),  // TODO: Pass all histories
+        lft::Strategies::evaluate_volume_surge(history)
+    };
+
+    // Find first enabled signal
+    for (const auto &signal : signals) {
+      if (not signal.should_buy)
+        continue;
+
+      if (not enabled_strategies.contains(signal.strategy_name) or
+          not enabled_strategies.at(signal.strategy_name))
+        continue;
+
+      std::println("🚨 SIGNAL: {} - {} ({})", symbol, signal.strategy_name, signal.reason);
+      std::println("   Placing order for ${:.2f}...", notional_amount);
+
+      // Create unique client_order_id with timestamp
+      const auto timestamp_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+          now.time_since_epoch()).count();
+      const auto client_order_id = std::format("{}_{}_{}|tp:{:.1f}|sl:-{:.1f}|ts:{:.1f}",
+          symbol, signal.strategy_name, timestamp_ms,
+          take_profit_pct * 100.0, stop_loss_pct * 100.0, trailing_stop_pct * 100.0);
+
+      if (auto order = client.place_order(symbol, "buy", notional_amount, client_order_id)) {
+        std::println("✅ Order placed: {}", symbol);
+
+        // Track the position immediately
+        position_strategies[symbol] = signal.strategy_name;
+        position_entry_times[symbol] = now;
+        symbols_in_use.insert(symbol);  // Prevent duplicate orders in same evaluation cycle
+      } else {
+        std::println("❌ Order failed: {}", symbol);
+      }
+
+      break;  // Only one strategy per symbol
     }
   }
 }
@@ -317,11 +402,57 @@ void check_exits(AlpacaClient &client,
     // Fetch current price
     if (auto snapshot = client.get_snapshot(pos.symbol)) {
       const auto current_price = snapshot->latest_trade_price;
+      const auto unrealized_pl = pos.unrealized_pl;
+      const auto cost_basis = pos.avg_entry_price * pos.qty;
+      const auto pl_pct = (unrealized_pl / cost_basis);
 
-      // TODO: Check TP/SL/trailing stop conditions
-      // For now, just log the position
-      const auto pnl_pct = ((current_price - pos.avg_entry_price) / pos.avg_entry_price) * 100.0;
-      std::println("  {} @ ${:.2f} ({:+.2f}%)", pos.symbol, current_price, pnl_pct);
+      // Update peak price for trailing stop
+      if (not position_peaks.contains(pos.symbol))
+        position_peaks[pos.symbol] = current_price;
+      else if (current_price > position_peaks[pos.symbol])
+        position_peaks[pos.symbol] = current_price;
+
+      // Calculate exit conditions
+      const auto peak = position_peaks[pos.symbol];
+      const auto trailing_stop_price = peak * (1.0 - trailing_stop_pct);
+      const auto trailing_stop_triggered = current_price < trailing_stop_price;
+
+      const auto should_exit = pl_pct >= take_profit_pct or
+                               pl_pct <= -stop_loss_pct or
+                               trailing_stop_triggered;
+
+      if (should_exit) {
+        const auto profit_percent = pl_pct * 100.0;
+
+        auto exit_reason = std::string{};
+        if (trailing_stop_triggered)
+          exit_reason = "TRAILING STOP";
+        else if (unrealized_pl > 0.0)
+          exit_reason = "PROFIT TARGET";
+        else
+          exit_reason = "STOP LOSS";
+
+        std::println("{} {}: {} ${:.2f} ({:+.2f}%)",
+                     unrealized_pl > 0.0 ? "💰" : "🛑", exit_reason,
+                     pos.symbol, unrealized_pl, profit_percent);
+        std::println("   Closing position...");
+
+        if (client.close_position(pos.symbol)) {
+          std::println("✅ Position closed: {}", pos.symbol);
+
+          // Clean up tracking and set cooldown
+          position_strategies.erase(pos.symbol);
+          position_peaks.erase(pos.symbol);
+          position_entry_times.erase(pos.symbol);
+          symbol_cooldowns[pos.symbol] = now + std::chrono::minutes{cooldown_minutes};
+        } else {
+          std::println("❌ Failed to close position: {}", pos.symbol);
+        }
+      } else {
+        // Just log the position status
+        const auto profit_percent = pl_pct * 100.0;
+        std::println("  {} @ ${:.2f} ({:+.2f}%)", pos.symbol, current_price, profit_percent);
+      }
     }
   }
 }
