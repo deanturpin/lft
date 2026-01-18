@@ -18,7 +18,16 @@ AlpacaClient::AlpacaClient()
           get_env_or_default("ALPACA_DATA_URL", "https://data.alpaca.markets")},
       data_api_key_{get_env_or_default("ALPACA_DATA_API_KEY", api_key_)},
       data_api_secret_{
-          get_env_or_default("ALPACA_DATA_API_SECRET", api_secret_)} {}
+          get_env_or_default("ALPACA_DATA_API_SECRET", api_secret_)} {
+  // Validate required credentials
+  if (api_key_.empty() or api_secret_.empty()) {
+    std::println("❌ ERROR: ALPACA_API_KEY and ALPACA_API_SECRET must be set");
+    std::println("Please set environment variables before running:");
+    std::println("  export ALPACA_API_KEY=\"your_key\"");
+    std::println("  export ALPACA_API_SECRET=\"your_secret\"");
+    std::exit(1);
+  }
+}
 
 std::string AlpacaClient::get_env_or_default(std::string_view name,
                                              std::string_view default_val) {
