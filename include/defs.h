@@ -3,19 +3,23 @@
 namespace lft {
 
 // Trading parameters
-constexpr auto notional_amount = 1000.0;      // Dollar amount per trade
-constexpr auto calibration_days = 30;         // Duration for strategy calibration
-constexpr auto min_trades_to_enable = 10;     // Minimum trades to enable strategy
+constexpr auto notional_amount = 1000.0;  // Dollar amount per trade
+constexpr auto calibration_days = 30;     // Duration for strategy calibration
+constexpr auto min_trades_to_enable = 10; // Minimum trades to enable strategy
 
 // Trade eligibility filters (Tier 1 - Must Do)
-constexpr auto max_spread_bps_stocks = 30.0;  // Max 30 bps (0.30%) spread for stocks
-constexpr auto max_spread_bps_crypto = 100.0; // Max 100 bps (1.00%) spread for crypto
-constexpr auto min_volume_ratio = 0.5;        // Min 50% of 20-period average volume
+constexpr auto max_spread_bps_stocks =
+    30.0; // Max 30 bps (0.30%) spread for stocks
+constexpr auto max_spread_bps_crypto =
+    100.0;                             // Max 100 bps (1.00%) spread for crypto
+constexpr auto min_volume_ratio = 0.5; // Min 50% of 20-period average volume
 
 // Cost estimation (Tier 2 - Edge Reality)
-constexpr auto slippage_buffer_bps = 3.0;     // Pessimistic slippage estimate (3 bps)
-constexpr auto adverse_selection_bps = 2.0;   // Adverse selection cost (2 bps)
-constexpr auto min_edge_bps = 10.0;           // Minimum edge required after costs (10 bps)
+constexpr auto slippage_buffer_bps =
+    3.0; // Pessimistic slippage estimate (3 bps)
+constexpr auto adverse_selection_bps = 2.0; // Adverse selection cost (2 bps)
+constexpr auto min_edge_bps =
+    10.0; // Minimum edge required after costs (10 bps)
 
 // Asset watchlists
 #include <string>
@@ -35,12 +39,11 @@ inline const auto stocks = std::vector<std::string>{
     "NVDA",  // NVIDIA - GPUs, AI chips
     "TSLA",  // Tesla - Electric vehicles, energy
     // International
-    "ASML",  // EU semiconductors
-    "BABA",  // China e-commerce
-    "NVO",   // Healthcare (Denmark)
-    "SAP",   // European software
-    "TCAPF", // Tencent (China tech and gaming)
-    "TSM",   // Taiwan Semiconductor
+    "ASML", // EU semiconductors
+    "BABA", // China e-commerce
+    "NVO",  // Healthcare (Denmark)
+    "SAP",  // European software
+    "TSM",  // Taiwan Semiconductor
     // US sectors
     "BRK.B", // Berkshire Hathaway (diversified value)
     "JNJ",   // Healthcare
@@ -82,10 +85,12 @@ inline const auto crypto = std::vector<std::string>{
 };
 
 // Timing parameters
-// Note: Actual polling is aligned to :35 past each minute (see sleep_until_bar_ready)
-// Alpaca recalculates bars at :30 to include late trades, so :35 ensures complete data
-constexpr auto max_cycles = 60;       // Run for 60 minutes then re-calibrate
-constexpr auto cooldown_minutes = 15; // Minutes to wait before re-entering same symbol
+// Note: Actual polling is aligned to :35 past each minute (see
+// sleep_until_bar_ready) Alpaca recalculates bars at :30 to include late
+// trades, so :35 ensures complete data
+constexpr auto max_cycles = 60; // Run for 60 minutes then re-calibrate
+constexpr auto cooldown_minutes =
+    15; // Minutes to wait before re-entering same symbol
 
 // Alert thresholds
 constexpr auto stock_alert_threshold = 2.0;  // Standard alert at 2% move
@@ -148,30 +153,43 @@ static_assert(outlier_threshold <= 100.0,
               "Outlier threshold too high - max 100%");
 
 // Trade eligibility filter checks
-static_assert(max_spread_bps_stocks > 0.0, "Stock spread filter must be positive");
-static_assert(max_spread_bps_crypto > 0.0, "Crypto spread filter must be positive");
-static_assert(max_spread_bps_stocks >= 5.0, "Stock spread filter too tight - min 5 bps");
-static_assert(max_spread_bps_stocks <= 100.0, "Stock spread filter too loose - max 100 bps");
+static_assert(max_spread_bps_stocks > 0.0,
+              "Stock spread filter must be positive");
+static_assert(max_spread_bps_crypto > 0.0,
+              "Crypto spread filter must be positive");
+static_assert(max_spread_bps_stocks >= 5.0,
+              "Stock spread filter too tight - min 5 bps");
+static_assert(max_spread_bps_stocks <= 100.0,
+              "Stock spread filter too loose - max 100 bps");
 static_assert(max_spread_bps_crypto >= max_spread_bps_stocks,
               "Crypto spread filter should be >= stocks (less liquid)");
-static_assert(max_spread_bps_crypto <= 200.0, "Crypto spread filter too loose - max 200 bps");
+static_assert(max_spread_bps_crypto <= 200.0,
+              "Crypto spread filter too loose - max 200 bps");
 static_assert(min_volume_ratio > 0.0, "Volume ratio filter must be positive");
-static_assert(min_volume_ratio <= 1.0, "Volume ratio filter cannot exceed 100%");
+static_assert(min_volume_ratio <= 1.0,
+              "Volume ratio filter cannot exceed 100%");
 
 // Cost estimation checks
 static_assert(slippage_buffer_bps >= 0.0, "Slippage buffer cannot be negative");
-static_assert(slippage_buffer_bps <= 10.0, "Slippage buffer too high - max 10 bps");
-static_assert(adverse_selection_bps >= 0.0, "Adverse selection cost cannot be negative");
-static_assert(adverse_selection_bps <= 10.0, "Adverse selection cost too high - max 10 bps");
+static_assert(slippage_buffer_bps <= 10.0,
+              "Slippage buffer too high - max 10 bps");
+static_assert(adverse_selection_bps >= 0.0,
+              "Adverse selection cost cannot be negative");
+static_assert(adverse_selection_bps <= 10.0,
+              "Adverse selection cost too high - max 10 bps");
 static_assert(min_edge_bps > 0.0, "Minimum edge must be positive");
-static_assert(min_edge_bps >= slippage_buffer_bps + adverse_selection_bps,
-              "Minimum edge should cover at least slippage + adverse selection");
-static_assert(min_edge_bps <= 50.0, "Minimum edge too high - may block all trades");
+static_assert(
+    min_edge_bps >= slippage_buffer_bps + adverse_selection_bps,
+    "Minimum edge should cover at least slippage + adverse selection");
+static_assert(min_edge_bps <= 50.0,
+              "Minimum edge too high - may block all trades");
 
 // Sanity check: total costs should be reasonable
-static_assert(slippage_buffer_bps + adverse_selection_bps < max_spread_bps_stocks,
+static_assert(slippage_buffer_bps + adverse_selection_bps <
+                  max_spread_bps_stocks,
               "Total non-spread costs should be less than max spread");
-static_assert(slippage_buffer_bps + adverse_selection_bps + max_spread_bps_stocks < 100.0,
-              "Total costs (spread + slippage + adverse) exceed 100 bps - unrealistic");
+static_assert(
+    slippage_buffer_bps + adverse_selection_bps + max_spread_bps_stocks < 100.0,
+    "Total costs (spread + slippage + adverse) exceed 100 bps - unrealistic");
 
 } // namespace lft
