@@ -18,6 +18,67 @@ constexpr auto trailing_stop_pct = 0.30;  // 30%
 constexpr auto starting_capital = 100000.0;
 constexpr auto notional_per_trade = 1000.0;
 
+// Compile-time validation of exit parameters
+static_assert(take_profit_pct > 0.0, "Take profit must be positive");
+static_assert(take_profit_pct >= 0.01, "Take profit too small - min 1%");
+static_assert(take_profit_pct <= 0.10, "Take profit too large - max 10%");
+static_assert(stop_loss_pct > 0.0, "Stop loss must be positive");
+static_assert(stop_loss_pct >= 0.01, "Stop loss too small - min 1%");
+static_assert(stop_loss_pct <= 0.20, "Stop loss too large - max 20%");
+static_assert(stop_loss_pct >= take_profit_pct, "Stop loss should be >= take profit (risk management)");
+static_assert(trailing_stop_pct > 0.0, "Trailing stop must be positive");
+static_assert(trailing_stop_pct >= 0.05, "Trailing stop too tight - min 5%");
+static_assert(trailing_stop_pct <= 0.50, "Trailing stop too loose - max 50%");
+static_assert(trailing_stop_pct >= take_profit_pct, "Trailing stop should be >= take profit");
+static_assert(starting_capital > 0.0, "Starting capital must be positive");
+static_assert(starting_capital >= 10000.0, "Starting capital too low - min $10k");
+static_assert(starting_capital <= 10000000.0, "Starting capital dangerously high - max $10M");
+static_assert(notional_per_trade > 0.0, "Trade size must be positive");
+static_assert(notional_per_trade >= 100.0, "Trade size too small - min $100");
+static_assert(notional_per_trade <= starting_capital / 10.0, "Trade size too large - max 10% of capital");
+static_assert(notional_per_trade <= 10000.0, "Trade size dangerously high - max $10k per trade");
+
+// Constexpr helper functions for compile-time testing
+namespace {
+// Calculate P&L percentage
+constexpr double calculate_pl_pct(double entry, double current) {
+  return (current - entry) / entry;
+}
+
+// Check if price hits take profit
+constexpr bool hits_take_profit(double entry, double current, double tp_pct) {
+  return calculate_pl_pct(entry, current) >= tp_pct;
+}
+
+// Check if price hits stop loss
+constexpr bool hits_stop_loss(double entry, double current, double sl_pct) {
+  return calculate_pl_pct(entry, current) <= -sl_pct;
+}
+
+// Check if price hits trailing stop
+constexpr bool hits_trailing_stop(double peak, double current, double ts_pct) {
+  return current < peak * (1.0 - ts_pct);
+}
+
+// Calculate trailing stop price from peak
+constexpr double trailing_stop_price(double peak, double ts_pct) {
+  return peak * (1.0 - ts_pct);
+}
+} // namespace
+
+// Compile-time tests for helper functions
+static_assert(calculate_pl_pct(100.0, 102.0) == 0.02, "2% gain");
+static_assert(calculate_pl_pct(100.0, 98.0) == -0.02, "-2% loss");
+static_assert(calculate_pl_pct(100.0, 100.0) == 0.0, "No change");
+static_assert(hits_take_profit(100.0, 102.0, 0.02), "TP hit at +2%");
+static_assert(not hits_take_profit(100.0, 101.9, 0.02), "TP not hit at +1.9%");
+static_assert(hits_stop_loss(100.0, 95.0, 0.05), "SL hit at -5%");
+static_assert(not hits_stop_loss(100.0, 95.1, 0.05), "SL not hit at -4.9%");
+static_assert(hits_trailing_stop(105.0, 73.4, 0.30), "Trailing stop hit (30% from peak)");
+static_assert(not hits_trailing_stop(105.0, 73.6, 0.30), "Trailing stop not hit");
+static_assert(trailing_stop_price(100.0, 0.30) == 70.0, "30% trailing stop = 70.0");
+static_assert(trailing_stop_price(105.0, 0.30) == 73.5, "30% trailing stop from 105");
+
 // Persistent position tracking state (across function calls)
 namespace {
 auto position_strategies = std::map<std::string, std::string>{};  // symbol -> strategy name
