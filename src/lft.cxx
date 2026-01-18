@@ -1125,7 +1125,7 @@ void log_blocked_trade(
 // Live trading loop
 void run_live_trading(lft::AlpacaClient &client,
                       const std::vector<std::string> &stocks,
-                      const std::vector<std::string> &crypto,
+                      [[maybe_unused]] const std::vector<std::string> &crypto,
                       const std::map<std::string, lft::StrategyConfig> &configs
 #ifdef HAVE_FTXUI
                       ,
@@ -1158,8 +1158,8 @@ void run_live_trading(lft::AlpacaClient &client,
   auto starting_equity_captured = false;
 
 #ifdef HAVE_FTXUI
-  auto order_number = 0uz;
-  auto cycle_count = 0uz;
+  [[maybe_unused]] auto order_number = 0uz;
+  [[maybe_unused]] auto cycle_count = 0uz;
 #endif
 
   // Startup: recover open positions from order history
