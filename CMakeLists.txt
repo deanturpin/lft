@@ -50,7 +50,14 @@ FetchContent_Declare(
     GIT_TAG v3.11.3
 )
 
-FetchContent_MakeAvailable(httplib json)
+# Catch2 for unit testing
+FetchContent_Declare(
+    Catch2
+    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+    GIT_TAG v3.5.1
+)
+
+FetchContent_MakeAvailable(httplib json Catch2)
 
 # Include directories
 include_directories(include)
@@ -64,3 +71,11 @@ target_link_libraries(alpaca_client PUBLIC httplib::httplib nlohmann_json::nlohm
 # Main executable (entry point: main.cxx)
 add_executable(lft src/main.cxx src/phases.cxx src/strategies.cxx)
 target_link_libraries(lft PRIVATE alpaca_client)
+
+# Test executable
+add_executable(lft_tests tests/test_phases.cxx src/phases.cxx src/strategies.cxx)
+target_link_libraries(lft_tests PRIVATE alpaca_client Catch2::Catch2WithMain)
+
+# Enable CTest
+enable_testing()
+add_test(NAME lft_tests COMMAND lft_tests)
