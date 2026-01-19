@@ -250,11 +250,11 @@ eod_cutoff_time(std::chrono::system_clock::time_point now) {
   const auto is_dst = (month >= dst_start_month and month <= dst_end_month);
   const auto et_to_utc = is_dst ? 4h : 5h; // Hours to add to ET to get UTC
 
-  // Start with today's date in UTC, then set time to 3:55 PM ET converted to
-  // UTC 3:55 PM ET = 19:55 UTC (EST) or 20:55 UTC (EDT)
+  // Start with today's date in UTC, then set time to 3:50 PM ET converted to
+  // UTC 3:50 PM ET = 20:50 UTC (EST) or 19:50 UTC (EDT)
   utc_tm.tm_hour =
-      15 + static_cast<int>(et_to_utc.count()); // 3:55 PM ET in UTC hours
-  utc_tm.tm_min = 55;
+      15 + static_cast<int>(et_to_utc.count()); // 3:50 PM ET in UTC hours
+  utc_tm.tm_min = 50;
   utc_tm.tm_sec = 0;
 
   return system_clock::from_time_t(std::mktime(&utc_tm));
