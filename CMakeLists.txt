@@ -72,6 +72,7 @@ target_link_libraries(alpaca_client PUBLIC httplib::httplib nlohmann_json::nlohm
 add_executable(lft
     src/main.cxx
     src/lft.cxx
+    src/globals.cxx
     src/calibrate.cxx
     src/evaluate.cxx
     src/check_entries.cxx
