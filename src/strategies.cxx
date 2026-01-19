@@ -279,8 +279,9 @@ StrategySignal Strategies::evaluate_relative_strength(
     if (not history.has_history)
         return signal;
 
-    // Defensive assertion: ensure we have assets to compare against
-    assert(!all_histories.empty() && "Need at least one asset for relative strength");
+    // Need at least one asset to compare against (can be empty if network failed during initial fetch)
+    if (all_histories.empty())
+        return signal;
 
     // Calculate average change across all assets
     auto total_change = 0.0;

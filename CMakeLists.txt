@@ -73,10 +73,11 @@ add_executable(lft
     src/main.cxx
     src/lft.cxx
     src/calibrate.cxx
-    src/evaluate_entries.cxx
+    src/evaluate.cxx
+    src/check_entries.cxx
     src/check_exits.cxx
     src/liquidate.cxx
-    src/summary.cxx
+    src/account.cxx
     src/strategies.cxx
 )
 target_link_libraries(lft PRIVATE alpaca_client)
@@ -86,7 +87,7 @@ add_executable(lft_tests
     tests/test_phases.cxx
     src/lft.cxx
     src/calibrate.cxx
-    src/evaluate_entries.cxx
+    src/check_entries.cxx
     src/check_exits.cxx
     src/liquidate.cxx
     src/strategies.cxx
@@ -97,7 +98,7 @@ add_executable(lft_trading_tests
     tests/test_trading_logic.cxx
     src/lft.cxx
     src/calibrate.cxx
-    src/evaluate_entries.cxx
+    src/check_entries.cxx
     src/check_exits.cxx
     src/liquidate.cxx
     src/strategies.cxx

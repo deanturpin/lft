@@ -19,7 +19,10 @@ extern std::map<std::string, std::string> position_strategies;
 extern std::map<std::string, double> position_peaks;
 extern std::map<std::string, std::chrono::system_clock::time_point> position_entry_times;
 
-void check_exits(AlpacaClient &client) {
+void check_exits(AlpacaClient &client, std::chrono::system_clock::time_point now) {
+  std::println("\n📤 Checking exits at {:%H:%M:%S}",
+               std::chrono::floor<std::chrono::seconds>(now));
+
   const auto positions = client.get_positions();
 
   if (positions.empty()) {

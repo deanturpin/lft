@@ -1,5 +1,5 @@
-// Phase 2: Entry Evaluation
-// Evaluates entry signals for all watchlist symbols every 15 minutes
+// Phase 2: Entry Checking
+// Checks entry signals and executes trades for all watchlist symbols every 15 minutes
 
 #include "lft.h"
 #include "defs.h"
@@ -7,6 +7,7 @@
 #include <chrono>
 #include <format>
 #include <map>
+#include <nlohmann/json.hpp>
 #include <print>
 #include <set>
 #include <string>
@@ -24,8 +25,8 @@ extern std::map<std::string, std::string> position_strategies;
 extern std::map<std::string, double> position_peaks;
 extern std::map<std::string, std::chrono::system_clock::time_point> position_entry_times;
 
-void evaluate_entries(AlpacaClient &client,
-                      const std::map<std::string, bool> &enabled_strategies) {
+void check_entries(AlpacaClient &client,
+                   const std::map<std::string, bool> &enabled_strategies) {
   // Fetch current positions to avoid duplicate entries
   const auto positions = client.get_positions();
   auto symbols_in_use = std::set<std::string>{};
@@ -120,13 +121,31 @@ void evaluate_entries(AlpacaClient &client,
           symbol, signal.strategy_name, timestamp_ms,
           take_profit_pct * 100.0, stop_loss_pct * 100.0, trailing_stop_pct * 100.0);
 
-      if (auto order = client.place_order(symbol, "buy", notional_amount, client_order_id)) {
-        std::println("✅ Order placed: {}", symbol);
+      auto order = client.place_order(symbol, "buy", notional_amount, client_order_id);
+      if (order) {
+        // Parse order response to verify status
+        auto order_json = nlohmann::json::parse(order.value(), nullptr, false);
+        if (not order_json.is_discarded()) {
+          const auto order_id = order_json.value("id", "unknown");
+          const auto status = order_json.value("status", "unknown");
+          const auto side = order_json.value("side", "unknown");
+          const auto notional_str = order_json.value("notional", "0");
 
-        // Track the position immediately
-        position_strategies[symbol] = signal.strategy_name;
-        position_entry_times[symbol] = now;
-        symbols_in_use.insert(symbol);  // Prevent duplicate orders in same evaluation cycle
+          std::println("✅ Order placed: ID={} status={} side={} notional=${}",
+                       order_id, status, side, notional_str);
+
+          // Only count as executed if order is accepted
+          if (status == "accepted" or status == "pending_new" or status == "filled") {
+            // Track the position immediately
+            position_strategies[symbol] = signal.strategy_name;
+            position_entry_times[symbol] = now;
+            symbols_in_use.insert(symbol);  // Prevent duplicate orders in same evaluation cycle
+          } else {
+            std::println("⚠️  Order not accepted: status={}", status);
+          }
+        } else {
+          std::println("❌ Failed to parse order response");
+        }
       } else {
         std::println("❌ Order failed: {}", symbol);
       }
