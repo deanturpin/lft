@@ -229,54 +229,38 @@ std::chrono::system_clock::time_point
 eod_cutoff_time(std::chrono::system_clock::time_point now) {
   using namespace std::chrono;
 
-  // Get current UTC time
-  const auto now_t = system_clock::to_time_t(now);
-  auto utc_tm = *std::gmtime(&now_t);
+  // Convert current time to Eastern Time
+  const auto et_now = zoned_time{"America/New_York", now};
 
-  // Calculate ET offset (EST=UTC-5, EDT=UTC-4)
-  constexpr auto dst_start_month = 2; // March
-  constexpr auto dst_end_month = 9;   // October
-  const auto month = utc_tm.tm_mon;
-  const auto is_dst = (month >= dst_start_month and month <= dst_end_month);
-  const auto et_to_utc = is_dst ? 4h : 5h; // Hours to add to ET to get UTC
+  // Get the date in ET and construct 3:50 PM ET
+  const auto et_local = et_now.get_local_time();
+  const auto et_date = floor<days>(et_local);
+  const auto eod_time_et = et_date + 15h + 50min; // 3:50 PM ET
 
-  // Start with today's date in UTC, then set time to 3:50 PM ET converted to
-  // UTC 3:50 PM ET = 20:50 UTC (EST) or 19:50 UTC (EDT)
-  utc_tm.tm_hour =
-      15 + static_cast<int>(et_to_utc.count()); // 3:50 PM ET in UTC hours
-  utc_tm.tm_min = 50;
-  utc_tm.tm_sec = 0;
-
-  return system_clock::from_time_t(std::mktime(&utc_tm));
+  // Convert back to system_clock::time_point (UTC)
+  return zoned_time{"America/New_York", eod_time_et}.get_sys_time();
 }
 
 // Check market hours (calculate manually, don't trust Alpaca's is_open field)
 bool is_market_hours(std::chrono::system_clock::time_point now) {
   using namespace std::chrono;
 
-  // Convert to UTC time
-  const auto now_t = system_clock::to_time_t(now);
-  const auto utc_time = std::gmtime(&now_t);
+  // Convert to Eastern Time
+  const auto et_now = zoned_time{"America/New_York", now};
+  const auto et_local = et_now.get_local_time();
 
-  // Check day of week (0 = Sunday, 6 = Saturday)
-  if (utc_time->tm_wday == 0 or utc_time->tm_wday == 6)
+  // Extract weekday from local time
+  const auto et_days = floor<days>(et_local);
+  const auto weekday = year_month_weekday{et_days}.weekday();
+
+  // Check if weekend (Saturday or Sunday)
+  if (weekday == Saturday or weekday == Sunday)
     return false;
 
-  // US Eastern Time offset (simplified DST: EST=UTC-5, EDT=UTC-4)
-  constexpr auto dst_start_month = 2; // March
-  constexpr auto dst_end_month = 9;   // October
-  const auto month = utc_time->tm_mon;
-  const auto is_dst = (month >= dst_start_month and month <= dst_end_month);
-  const auto et_offset = is_dst ? -4h : -5h;
-
-  // Get current time in ET
-  const auto et_now = now + et_offset;
-  const auto et_time_t = system_clock::to_time_t(et_now);
-  const auto et_tm = std::gmtime(&et_time_t);
-
-  const auto current_time = hours{et_tm->tm_hour} + minutes{et_tm->tm_min};
+  // Extract time of day in ET
+  const auto time_since_midnight = et_local - et_days;
   constexpr auto market_open = 9h + 30min; // 9:30 AM ET
   constexpr auto market_close = 16h;       // 4:00 PM ET
 
-  return (current_time >= market_open and current_time < market_close);
+  return (time_since_midnight >= market_open and time_since_midnight < market_close);
 }

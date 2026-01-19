@@ -21,64 +21,40 @@ using Catch::Matchers::WithinRel;
 
 // Test timing helpers
 TEST_CASE("Timing helpers calculate correct intervals", "[timing]") {
-  SECTION("is_market_hours correctly identifies market hours") {
-    // Create a time point for Tuesday 10:00 AM ET (14:00 UTC)
-    auto tm = std::tm{};
-    tm.tm_year = 126;  // 2026
-    tm.tm_mon = 0;     // January
-    tm.tm_mday = 20;   // Tuesday (not weekend)
-    tm.tm_hour = 10;   // 10 AM
-    tm.tm_min = 0;
-    tm.tm_sec = 0;
-    tm.tm_wday = 2;    // Tuesday
+  using namespace std::chrono;
 
-    auto time_point = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+  SECTION("is_market_hours correctly identifies market hours") {
+    // Create Tuesday 10:00 AM ET (January 20, 2026)
+    const auto jan_20_2026 = 2026y/January/20d;
+    const auto time_et = local_days{jan_20_2026} + 10h; // 10:00 AM ET
+    const auto time_point = zoned_time{"America/New_York", time_et}.get_sys_time();
 
     REQUIRE(is_market_hours(time_point));
   }
 
   SECTION("is_market_hours rejects weekends") {
-    // Sunday January 19, 2026 (confirmed Sunday via calendar)
-    auto tm = std::tm{};
-    tm.tm_year = 126;  // 2026
-    tm.tm_mon = 0;     // January
-    tm.tm_mday = 18;   // Sunday (mktime will calculate wday)
-    tm.tm_hour = 10;
-    tm.tm_min = 0;
-    tm.tm_sec = 0;
-    tm.tm_isdst = -1;  // Let mktime determine DST
-
-    auto time_point = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+    // Create Sunday 10:00 AM ET (January 18, 2026)
+    const auto jan_18_2026 = 2026y/January/18d;
+    const auto time_et = local_days{jan_18_2026} + 10h; // 10:00 AM ET
+    const auto time_point = zoned_time{"America/New_York", time_et}.get_sys_time();
 
     REQUIRE_FALSE(is_market_hours(time_point));
   }
 
   SECTION("is_market_hours rejects before 9:30 AM") {
-    auto tm = std::tm{};
-    tm.tm_year = 126;
-    tm.tm_mon = 0;
-    tm.tm_mday = 20;   // Tuesday
-    tm.tm_hour = 9;
-    tm.tm_min = 15;    // 9:15 AM - before market open
-    tm.tm_sec = 0;
-    tm.tm_wday = 2;
-
-    auto time_point = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+    // Create Tuesday 9:15 AM ET (January 20, 2026)
+    const auto jan_20_2026 = 2026y/January/20d;
+    const auto time_et = local_days{jan_20_2026} + 9h + 15min; // 9:15 AM ET
+    const auto time_point = zoned_time{"America/New_York", time_et}.get_sys_time();
 
     REQUIRE_FALSE(is_market_hours(time_point));
   }
 
   SECTION("is_market_hours rejects after 4:00 PM") {
-    auto tm = std::tm{};
-    tm.tm_year = 126;
-    tm.tm_mon = 0;
-    tm.tm_mday = 20;   // Tuesday
-    tm.tm_hour = 16;   // 4:00 PM - market closed
-    tm.tm_min = 0;
-    tm.tm_sec = 0;
-    tm.tm_wday = 2;
-
-    auto time_point = std::chrono::system_clock::from_time_t(std::mktime(&tm));
+    // Create Tuesday 4:00 PM ET (January 20, 2026)
+    const auto jan_20_2026 = 2026y/January/20d;
+    const auto time_et = local_days{jan_20_2026} + 16h; // 4:00 PM ET
+    const auto time_point = zoned_time{"America/New_York", time_et}.get_sys_time();
 
     REQUIRE_FALSE(is_market_hours(time_point));
   }
