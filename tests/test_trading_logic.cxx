@@ -8,8 +8,8 @@
 using Catch::Matchers::WithinRel;
 
 // Helper to create mock bar data
-lft::PriceHistory create_mock_history(const std::vector<double>& prices) {
-  auto history = lft::PriceHistory{};
+PriceHistory create_mock_history(const std::vector<double>& prices) {
+  auto history = PriceHistory{};
   for (auto price : prices) {
     // Add bars with high/low = price +/- 0.5%, volume = 1000
     auto high = price * 1.005;
@@ -33,7 +33,7 @@ TEST_CASE("MA crossover strategy generates correct signals", "[strategies][.]") 
     };
 
     auto history = create_mock_history(prices);
-    auto signal = lft::Strategies::evaluate_ma_crossover(history);
+    auto signal = Strategies::evaluate_ma_crossover(history);
 
     REQUIRE(signal.should_buy);
     REQUIRE(signal.strategy_name == "ma_crossover");
@@ -50,7 +50,7 @@ TEST_CASE("MA crossover strategy generates correct signals", "[strategies][.]") 
     };
 
     auto history = create_mock_history(prices);
-    auto signal = lft::Strategies::evaluate_ma_crossover(history);
+    auto signal = Strategies::evaluate_ma_crossover(history);
 
     REQUIRE_FALSE(signal.should_buy);
   }
@@ -67,7 +67,7 @@ TEST_CASE("Mean reversion strategy detects oversold conditions", "[strategies][.
     };
 
     auto history = create_mock_history(prices);
-    auto signal = lft::Strategies::evaluate_mean_reversion(history);
+    auto signal = Strategies::evaluate_mean_reversion(history);
 
     REQUIRE(signal.should_buy);
     REQUIRE(signal.strategy_name == "mean_reversion");
@@ -83,7 +83,7 @@ TEST_CASE("Mean reversion strategy detects oversold conditions", "[strategies][.
     };
 
     auto history = create_mock_history(prices);
-    auto signal = lft::Strategies::evaluate_mean_reversion(history);
+    auto signal = Strategies::evaluate_mean_reversion(history);
 
     REQUIRE_FALSE(signal.should_buy);
   }
@@ -91,7 +91,7 @@ TEST_CASE("Mean reversion strategy detects oversold conditions", "[strategies][.
 
 TEST_CASE("Volume surge strategy detects unusual volume", "[strategies][.]") {
   SECTION("High volume with price increase generates signal") {
-    auto history = lft::PriceHistory{};
+    auto history = PriceHistory{};
 
     // Normal volume bars
     for (auto i = 0; i < 15; ++i) {
@@ -101,21 +101,21 @@ TEST_CASE("Volume surge strategy detects unusual volume", "[strategies][.]") {
     // Volume surge with price increase
     history.add_bar(102.0, 102.5, 101.5, 5000);  // 5x normal volume
 
-    auto signal = lft::Strategies::evaluate_volume_surge(history);
+    auto signal = Strategies::evaluate_volume_surge(history);
 
     REQUIRE(signal.should_buy);
     REQUIRE(signal.strategy_name == "volume_surge");
   }
 
   SECTION("Normal volume generates no signal") {
-    auto history = lft::PriceHistory{};
+    auto history = PriceHistory{};
 
     // All normal volume
     for (auto i = 0; i < 20; ++i) {
       history.add_bar(100.0 + i * 0.1, 100.5 + i * 0.1, 99.5 + i * 0.1, 1000);
     }
 
-    auto signal = lft::Strategies::evaluate_volume_surge(history);
+    auto signal = Strategies::evaluate_volume_surge(history);
 
     REQUIRE_FALSE(signal.should_buy);
   }
@@ -170,7 +170,7 @@ TEST_CASE("Spread filter blocks wide spreads", "[filters]") {
     auto spread_bps = ((ask - bid) / bid) * 10000.0;
 
     REQUIRE_THAT(spread_bps, WithinRel(20.0, 0.01));
-    REQUIRE(spread_bps <= lft::max_spread_bps_stocks);  // 30 bps limit
+    REQUIRE(spread_bps <= max_spread_bps_stocks);  // 30 bps limit
   }
 
   SECTION("Wide spread blocks entry") {
@@ -179,7 +179,7 @@ TEST_CASE("Spread filter blocks wide spreads", "[filters]") {
     auto spread_bps = ((ask - bid) / bid) * 10000.0;
 
     REQUIRE_THAT(spread_bps, WithinRel(500.0, 0.01));
-    REQUIRE(spread_bps > lft::max_spread_bps_stocks);  // Exceeds 30 bps limit
+    REQUIRE(spread_bps > max_spread_bps_stocks);  // Exceeds 30 bps limit
   }
 }
 
@@ -191,7 +191,7 @@ TEST_CASE("Volume filter blocks low volume periods", "[filters]") {
     auto volume_ratio = current_volume / avg_volume;
 
     REQUIRE_THAT(volume_ratio, WithinRel(0.667, 0.001));
-    REQUIRE(volume_ratio >= lft::min_volume_ratio);  // 0.5 min ratio
+    REQUIRE(volume_ratio >= min_volume_ratio);  // 0.5 min ratio
   }
 
   SECTION("Low volume blocks entry") {
@@ -200,14 +200,14 @@ TEST_CASE("Volume filter blocks low volume periods", "[filters]") {
     auto volume_ratio = current_volume / avg_volume;
 
     REQUIRE_THAT(volume_ratio, WithinRel(0.25, 0.01));
-    REQUIRE(volume_ratio < lft::min_volume_ratio);  // Below 0.5 threshold
+    REQUIRE(volume_ratio < min_volume_ratio);  // Below 0.5 threshold
   }
 }
 
 // Test PriceHistory calculations
 TEST_CASE("PriceHistory calculates metrics correctly", "[pricehistory]") {
   SECTION("Moving average calculation") {
-    auto history = lft::PriceHistory{};
+    auto history = PriceHistory{};
 
     // Add 5 bars: 100, 102, 104, 106, 108
     for (auto i = 0; i < 5; ++i) {
@@ -220,7 +220,7 @@ TEST_CASE("PriceHistory calculates metrics correctly", "[pricehistory]") {
   }
 
   SECTION("Volatility calculation") {
-    auto history = lft::PriceHistory{};
+    auto history = PriceHistory{};
 
     // Add stable prices (low volatility)
     for (auto i = 0; i < 10; ++i) {
@@ -233,7 +233,7 @@ TEST_CASE("PriceHistory calculates metrics correctly", "[pricehistory]") {
   }
 
   SECTION("Average volume calculation") {
-    auto history = lft::PriceHistory{};
+    auto history = PriceHistory{};
 
     // Add bars with volume 1000, 2000, 3000
     history.add_bar(100.0, 101.0, 99.0, 1000);

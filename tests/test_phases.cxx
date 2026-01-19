@@ -11,8 +11,8 @@ using Catch::Matchers::WithinRel;
 // TODO: Either mock AlpacaClient or move these to integration tests
 // TEST_CASE("Market assessment correctly identifies tradeable conditions", "[market]") {
 //   SECTION("Empty snapshots returns not tradeable") {
-//     auto snapshots = std::vector<lft::Snapshot>{};
-//     auto assessment = lft::assess_market_conditions(client, snapshots);
+//     auto snapshots = std::vector<Snapshot>{};
+//     auto assessment = assess_market_conditions(client, snapshots);
 //
 //     REQUIRE_FALSE(assessment.tradeable);
 //     REQUIRE(assessment.summary.find("No market data") != std::string::npos);
@@ -34,7 +34,7 @@ TEST_CASE("Timing helpers calculate correct intervals", "[timing]") {
 
     auto time_point = std::chrono::system_clock::from_time_t(std::mktime(&tm));
 
-    REQUIRE(lft::is_market_hours(time_point));
+    REQUIRE(is_market_hours(time_point));
   }
 
   SECTION("is_market_hours rejects weekends") {
@@ -50,7 +50,7 @@ TEST_CASE("Timing helpers calculate correct intervals", "[timing]") {
 
     auto time_point = std::chrono::system_clock::from_time_t(std::mktime(&tm));
 
-    REQUIRE_FALSE(lft::is_market_hours(time_point));
+    REQUIRE_FALSE(is_market_hours(time_point));
   }
 
   SECTION("is_market_hours rejects before 9:30 AM") {
@@ -65,7 +65,7 @@ TEST_CASE("Timing helpers calculate correct intervals", "[timing]") {
 
     auto time_point = std::chrono::system_clock::from_time_t(std::mktime(&tm));
 
-    REQUIRE_FALSE(lft::is_market_hours(time_point));
+    REQUIRE_FALSE(is_market_hours(time_point));
   }
 
   SECTION("is_market_hours rejects after 4:00 PM") {
@@ -80,75 +80,75 @@ TEST_CASE("Timing helpers calculate correct intervals", "[timing]") {
 
     auto time_point = std::chrono::system_clock::from_time_t(std::mktime(&tm));
 
-    REQUIRE_FALSE(lft::is_market_hours(time_point));
+    REQUIRE_FALSE(is_market_hours(time_point));
   }
 }
 
 // Test configuration constants
 TEST_CASE("Trading constants are within safe ranges", "[config]") {
   SECTION("Notional amount is reasonable") {
-    REQUIRE(lft::notional_amount >= 100.0);
-    REQUIRE(lft::notional_amount <= 10000.0);
+    REQUIRE(notional_amount >= 100.0);
+    REQUIRE(notional_amount <= 10000.0);
   }
 
   SECTION("Calibration period is sensible") {
-    REQUIRE(lft::calibration_days >= 7);
-    REQUIRE(lft::calibration_days <= 365);
+    REQUIRE(calibration_days >= 7);
+    REQUIRE(calibration_days <= 365);
   }
 
   SECTION("Spread limits are appropriate") {
-    REQUIRE(lft::max_spread_bps_stocks >= 5.0);
-    REQUIRE(lft::max_spread_bps_stocks <= 100.0);
-    REQUIRE(lft::max_spread_bps_crypto >= lft::max_spread_bps_stocks);
+    REQUIRE(max_spread_bps_stocks >= 5.0);
+    REQUIRE(max_spread_bps_stocks <= 100.0);
+    REQUIRE(max_spread_bps_crypto >= max_spread_bps_stocks);
   }
 
   SECTION("Alert thresholds are ordered correctly") {
-    REQUIRE(lft::stock_alert_threshold > 0.0);
-    REQUIRE(lft::crypto_alert_threshold >= lft::stock_alert_threshold);
-    REQUIRE(lft::outlier_threshold > lft::crypto_alert_threshold);
+    REQUIRE(stock_alert_threshold > 0.0);
+    REQUIRE(crypto_alert_threshold >= stock_alert_threshold);
+    REQUIRE(outlier_threshold > crypto_alert_threshold);
   }
 }
 
 // Test alert helper functions
 TEST_CASE("Alert functions correctly identify significant moves", "[alerts]") {
   SECTION("Stock alerts trigger at 2%") {
-    REQUIRE_FALSE(lft::is_alert(1.9, false));
-    REQUIRE(lft::is_alert(2.0, false));
-    REQUIRE(lft::is_alert(3.0, false));
+    REQUIRE_FALSE(is_alert(1.9, false));
+    REQUIRE(is_alert(2.0, false));
+    REQUIRE(is_alert(3.0, false));
   }
 
   SECTION("Crypto alerts trigger at 5%") {
-    REQUIRE_FALSE(lft::is_alert(4.9, true));
-    REQUIRE(lft::is_alert(5.0, true));
-    REQUIRE(lft::is_alert(7.0, true));
+    REQUIRE_FALSE(is_alert(4.9, true));
+    REQUIRE(is_alert(5.0, true));
+    REQUIRE(is_alert(7.0, true));
   }
 
   SECTION("Outliers trigger at 20%") {
-    REQUIRE_FALSE(lft::is_outlier(19.9));
-    REQUIRE(lft::is_outlier(20.0));
-    REQUIRE(lft::is_outlier(50.0));
+    REQUIRE_FALSE(is_outlier(19.9));
+    REQUIRE(is_outlier(20.0));
+    REQUIRE(is_outlier(50.0));
   }
 
   SECTION("Negative moves also trigger alerts") {
-    REQUIRE(lft::is_alert(-2.5, false));
-    REQUIRE(lft::is_alert(-7.0, true));
-    REQUIRE(lft::is_outlier(-25.0));
+    REQUIRE(is_alert(-2.5, false));
+    REQUIRE(is_alert(-7.0, true));
+    REQUIRE(is_outlier(-25.0));
   }
 }
 
 // Test watchlist configuration
 TEST_CASE("Watchlists are properly configured", "[watchlist]") {
   SECTION("Stock watchlist is not empty") {
-    REQUIRE_FALSE(lft::stocks.empty());
+    REQUIRE_FALSE(stocks.empty());
   }
 
   SECTION("Crypto watchlist exists") {
     // Even if disabled, the vector should exist
-    REQUIRE(lft::crypto.empty());  // Currently disabled in dev config
+    REQUIRE(crypto.empty());  // Currently disabled in dev config
   }
 
   SECTION("Stock symbols are reasonable") {
-    for (const auto& symbol : lft::stocks) {
+    for (const auto& symbol : stocks) {
       REQUIRE_FALSE(symbol.empty());
       REQUIRE(symbol.length() <= 6);  // Most stock symbols are 1-5 chars
     }

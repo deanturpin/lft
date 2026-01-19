@@ -7,8 +7,6 @@
 #include <vector>
 #include <map>
 
-namespace lft {
-
 struct Quote {
     std::string symbol;
     double bid_price{};
@@ -128,5 +126,3 @@ private:
 
     std::string get_env_or_default(std::string_view, std::string_view);
 };
-
-} // namespace lft

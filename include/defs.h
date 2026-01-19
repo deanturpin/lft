@@ -1,7 +1,5 @@
 #pragma once
 
-namespace lft {
-
 // Trading parameters
 constexpr auto notional_amount = 1000.0;  // Dollar amount per trade
 constexpr auto calibration_days = 30;     // Duration for strategy calibration
@@ -191,5 +189,3 @@ static_assert(slippage_buffer_bps + adverse_selection_bps <
 static_assert(
     slippage_buffer_bps + adverse_selection_bps + max_spread_bps_stocks < 100.0,
     "Total costs (spread + slippage + adverse) exceed 100 bps - unrealistic");
-
-} // namespace lft

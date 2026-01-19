@@ -13,8 +13,6 @@
 #include <string>
 #include <vector>
 
-namespace lft {
-
 MarketEvaluation evaluate_market(AlpacaClient &client,
                                   const std::map<std::string, bool> &enabled_strategies,
                                   const std::set<std::string> &symbols_in_use) {
@@ -193,5 +191,3 @@ void display_evaluation(const MarketEvaluation &eval,
                  s.symbol, s.price, s.spread_bps, s.edge_bps, strategy_str, ready_indicator, s.status_summary);
   }
 }
-
-} // namespace lft

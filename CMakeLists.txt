@@ -87,6 +87,7 @@ target_link_libraries(lft PRIVATE alpaca_client)
 add_executable(lft_tests
     tests/test_phases.cxx
     src/lft.cxx
+    src/globals.cxx
     src/calibrate.cxx
     src/check_entries.cxx
     src/check_exits.cxx
@@ -98,6 +99,7 @@ target_link_libraries(lft_tests PRIVATE alpaca_client Catch2::Catch2WithMain)
 add_executable(lft_trading_tests
     tests/test_trading_logic.cxx
     src/lft.cxx
+    src/globals.cxx
     src/calibrate.cxx
     src/check_entries.cxx
     src/check_exits.cxx

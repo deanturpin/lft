@@ -1,23 +1,20 @@
 // Phase 1: Strategy Calibration
 // Backtests all strategies on historical data and enables profitable ones
 
-#include "lft.h"
 #include "defs.h"
+#include "lft.h"
 #include "strategies.h"
 #include <algorithm>
-#include <iostream>
 #include <map>
 #include <print>
 #include <string>
 #include <string_view>
 #include <vector>
 
-namespace lft {
-
 // Exit parameters (from exit_logic_tests.h concept)
-constexpr auto take_profit_pct = 0.02;    // 2%
-constexpr auto stop_loss_pct = 0.05;      // 5%
-constexpr auto trailing_stop_pct = 0.30;  // 30%
+constexpr auto take_profit_pct = 0.02;   // 2%
+constexpr auto stop_loss_pct = 0.05;     // 5%
+constexpr auto trailing_stop_pct = 0.30; // 30%
 constexpr auto notional_per_trade = 1000.0;
 
 // Compile-time validation of exit parameters
@@ -27,14 +24,17 @@ static_assert(take_profit_pct <= 0.10, "Take profit too large - max 10%");
 static_assert(stop_loss_pct > 0.0, "Stop loss must be positive");
 static_assert(stop_loss_pct >= 0.01, "Stop loss too small - min 1%");
 static_assert(stop_loss_pct <= 0.20, "Stop loss too large - max 20%");
-static_assert(stop_loss_pct >= take_profit_pct, "Stop loss should be >= take profit (risk management)");
+static_assert(stop_loss_pct >= take_profit_pct,
+              "Stop loss should be >= take profit (risk management)");
 static_assert(trailing_stop_pct > 0.0, "Trailing stop must be positive");
 static_assert(trailing_stop_pct >= 0.05, "Trailing stop too tight - min 5%");
 static_assert(trailing_stop_pct <= 0.50, "Trailing stop too loose - max 50%");
-static_assert(trailing_stop_pct >= take_profit_pct, "Trailing stop should be >= take profit");
+static_assert(trailing_stop_pct >= take_profit_pct,
+              "Trailing stop should be >= take profit");
 static_assert(notional_per_trade > 0.0, "Trade size must be positive");
 static_assert(notional_per_trade >= 100.0, "Trade size too small - min $100");
-static_assert(notional_per_trade <= 10000.0, "Trade size dangerously high - max $10k per trade");
+static_assert(notional_per_trade <= 10000.0,
+              "Trade size dangerously high - max $10k per trade");
 
 namespace {
 
@@ -82,7 +82,8 @@ StrategyStats run_backtest_for_strategy(
         auto &pos = positions[symbol];
 
         const auto current_price = bar.close;
-        const auto pl_dollars = (current_price - pos.entry_price) * pos.quantity;
+        const auto pl_dollars =
+            (current_price - pos.entry_price) * pos.quantity;
         const auto pl_pct = pl_dollars / (pos.entry_price * pos.quantity);
 
         // Update peak for trailing stop
@@ -91,9 +92,10 @@ StrategyStats run_backtest_for_strategy(
 
         // Check exit conditions
         const auto should_exit =
-            (pl_pct >= take_profit_pct) or                                    // Take profit
-            (pl_pct <= -stop_loss_pct) or                                     // Stop loss
-            (current_price < pos.peak_price * (1.0 - trailing_stop_pct));     // Trailing stop
+            (pl_pct >= take_profit_pct) or // Take profit
+            (pl_pct <= -stop_loss_pct) or  // Stop loss
+            (current_price <
+             pos.peak_price * (1.0 - trailing_stop_pct)); // Trailing stop
 
         if (should_exit) {
           // Close position
@@ -125,7 +127,8 @@ StrategyStats run_backtest_for_strategy(
         else if (strategy_name == "volatility_breakout")
           signal = Strategies::evaluate_volatility_breakout(history);
         else if (strategy_name == "relative_strength")
-          signal = Strategies::evaluate_relative_strength(history, all_histories);
+          signal =
+              Strategies::evaluate_relative_strength(history, all_histories);
         else if (strategy_name == "volume_surge")
           signal = Strategies::evaluate_volume_surge(history);
 
@@ -178,8 +181,9 @@ StrategyStats run_backtest_for_strategy(
 
 } // anonymous namespace
 
-std::map<std::string, bool> calibrate(const std::map<std::string, std::vector<Bar>> &bars,
-                                       double starting_capital) {
+std::map<std::string, bool>
+calibrate(const std::map<std::string, std::vector<Bar>> &all_bars,
+          double starting_capital) {
   auto enabled = std::map<std::string, bool>{};
   auto strategy_stats = std::map<std::string, StrategyStats>{};
 
@@ -194,17 +198,17 @@ std::map<std::string, bool> calibrate(const std::map<std::string, std::vector<Ba
 
   for (const auto &strategy : strategies) {
     std::println("  🔧 Testing {}...", strategy);
-    std::cout << std::flush;
 
     // Run actual backtest
-    auto stats = run_backtest_for_strategy(strategy, bars, starting_capital);
+    auto stats = run_backtest_for_strategy(strategy, all_bars, starting_capital);
     strategy_stats[strategy] = stats;
 
     std::println("     ✓ Complete - {} trades, ${:.2f} P&L",
                  stats.trades_closed, stats.net_profit());
 
     // Enable if profitable AND has sufficient trade history
-    enabled[strategy] = (stats.net_profit() > 0.0 and stats.trades_closed >= min_trades_to_enable);
+    enabled[strategy] = (stats.net_profit() > 0.0 and
+                         stats.trades_closed >= min_trades_to_enable);
   }
 
   // Print summary table
@@ -215,8 +219,8 @@ std::map<std::string, bool> calibrate(const std::map<std::string, std::vector<Ba
     const auto is_enabled = enabled[strategy];
     const auto status = is_enabled ? "ENABLED " : "DISABLED";
 
-    std::println("  {:<20} {:>10} P&L=${:>8.2f} WR={:>5.1f}%",
-                 strategy, status, stats.net_profit(), stats.win_rate());
+    std::println("  {:<20} {:>10} P&L=${:>8.2f} WR={:>5.1f}%", strategy, status,
+                 stats.net_profit(), stats.win_rate());
 
     if (is_enabled)
       ++enabled_count;
@@ -227,5 +231,3 @@ std::map<std::string, bool> calibrate(const std::map<std::string, std::vector<Ba
 
   return enabled;
 }
-
-} // namespace lft

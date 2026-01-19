@@ -4,8 +4,6 @@
 #include "lft.h"
 #include <print>
 
-namespace lft {
-
 void liquidate_all(AlpacaClient &client) {
   const auto positions = client.get_positions();
 
@@ -19,5 +17,3 @@ void liquidate_all(AlpacaClient &client) {
     client.close_position(pos.symbol);
   }
 }
-
-} // namespace lft

@@ -7,14 +7,12 @@
 #include <print>
 #include <string>
 
-namespace lft {
-
 // Exit parameters (shared with other phases)
 constexpr auto take_profit_pct = 0.02;    // 2%
 constexpr auto stop_loss_pct = 0.05;      // 5%
 constexpr auto trailing_stop_pct = 0.30;  // 30%
 
-// Import global tracking state (defined in lft.cxx)
+// Import global tracking state (defined in globals.cxx)
 extern std::map<std::string, std::string> position_strategies;
 extern std::map<std::string, double> position_peaks;
 extern std::map<std::string, std::chrono::system_clock::time_point> position_entry_times;
@@ -87,5 +85,3 @@ void check_exits(AlpacaClient &client, std::chrono::system_clock::time_point now
     }
   }
 }
-
-} // namespace lft

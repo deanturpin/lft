@@ -3,8 +3,6 @@
 #include <cmath>
 #include <format>
 
-namespace lft {
-
 // PriceHistory implementation
 
 void PriceHistory::add_price_with_timestamp(double price, std::string_view timestamp) {
@@ -369,5 +367,3 @@ double Strategies::calculate_volume_ratio(const PriceHistory& history) {
     auto current_vol = static_cast<double>(history.volumes.back());
     return current_vol / avg;
 }
-
-} // namespace lft

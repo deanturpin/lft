@@ -12,36 +12,30 @@ int main() {
   using namespace std::chrono_literals;
 
   // Create connection to exchange
-  auto client = lft::AlpacaClient{};
+  auto client = AlpacaClient{};
 
   // Define session duration
   const auto session_start = std::chrono::system_clock::now();
-  const auto session_end = lft::next_whole_hour(session_start);
-  const auto eod = lft::eod_cutoff_time(session_start); // 3:50 PM ET today
+  const auto session_end = next_whole_hour(session_start);
+  const auto eod = eod_cutoff_time(session_start); // 3:50 PM ET today
 
   // Fetch 30 days of 15-minute bars for calibration
   std::println("📊 Fetching historical data...");
-  const auto bars = lft::fetch_bars(client);
+  const auto bars = fetch_bars(client);
 
   // Calibrate strategies using historic data with fixed starting capital
   constexpr auto backtest_capital = 100000.0;
   std::println("🎯 Calibrating strategies with ${:.2f} starting capital...",
                backtest_capital);
-  const auto enabled_strategies = lft::calibrate(bars, backtest_capital);
+  const auto enabled_strategies = calibrate(bars, backtest_capital);
 
   //   std::println("🔄 Starting event loop until {:%H:%M:%S}\n", session_end);
 
   // Run 60 minute cycle, synchronised to whole hour
   // Create intervals
-  auto next_entry = lft::next_15_minute_bar(session_start);
-  auto next_exit = lft::next_minute_at_35_seconds(session_start);
+  auto next_entry = next_15_minute_bar(session_start);
+  auto next_exit = next_minute_at_35_seconds(session_start);
   auto liquidated = false;
-
-  // Display scheduled event times
-  std::println("\n⏰ Scheduled Events:");
-  std::println("  Next entry check:  {:%H:%M:%S}", std::chrono::floor<std::chrono::seconds>(next_entry));
-  std::println("  Next exit check:   {:%H:%M:%S}", std::chrono::floor<std::chrono::seconds>(next_exit));
-  std::println("  EOD liquidation:   {:%H:%M:%S}", std::chrono::floor<std::chrono::seconds>(eod));
 
   for (auto now = std::chrono::system_clock::now(); now < session_end;
        now = std::chrono::system_clock::now()) {
@@ -54,11 +48,17 @@ int main() {
         std::chrono::floor<std::chrono::seconds>(session_end),
         remaining.count());
 
+    // Display next scheduled event times
+    std::println("\n⏰ Next Events:");
+    std::println("  Entries:      {:%H:%M:%S}", std::chrono::floor<std::chrono::seconds>(next_entry));
+    std::println("  Exits:        {:%H:%M:%S}", std::chrono::floor<std::chrono::seconds>(next_exit));
+    std::println("  Liquidation:  {:%H:%M:%S}", std::chrono::floor<std::chrono::seconds>(eod));
+
     // Display balances and positions
-    lft::display_account_summary(client);
+    display_account_summary(client);
 
     // Check market hours
-    const auto is_closed = not lft::is_market_hours(now);
+    const auto is_closed = not is_market_hours(now);
     std::println("\n📊 Market: {}", is_closed ? "CLOSED" : "OPEN");
 
     if (is_closed or liquidated) {
@@ -80,8 +80,9 @@ int main() {
     // Liquidate all positions at the end of trading
     if (now >= eod) {
       std::println("🚨 EOD cutoff - liquidating all positions");
-      lft::liquidate_all(client);
-      liquidated = true;
+      liquidate_all(client);
+      // liquidated = true;
+      std::this_thread::sleep_for(10min);
       continue;
     }
 
@@ -94,21 +95,21 @@ int main() {
     // Evaluate market every minute (shows prices, spreads, and strategy
     // signals)
     auto evaluation =
-        lft::evaluate_market(client, enabled_strategies, symbols_in_use);
-    lft::display_evaluation(evaluation, enabled_strategies, now);
+        evaluate_market(client, enabled_strategies, symbols_in_use);
+    display_evaluation(evaluation, enabled_strategies, now);
 
     // Check exits every minute at :35 (after bar recalculation)
     if (now >= next_exit) {
-      lft::check_exits(client, now);
-      next_exit = lft::next_minute_at_35_seconds(now);
+      check_exits(client, now);
+      next_exit = next_minute_at_35_seconds(now);
     }
 
     // Execute entry trades every 15 minutes (aligned to :00, :15, :30, :45)
     if (now >= next_entry) {
       std::println("\n💼 Executing entry trades at {:%H:%M:%S}",
                    std::chrono::floor<std::chrono::seconds>(now));
-      lft::check_entries(client, enabled_strategies);
-      next_entry = lft::next_15_minute_bar(now);
+      check_entries(client, enabled_strategies);
+      next_entry = next_15_minute_bar(now);
     }
     // }
 

@@ -14,16 +14,6 @@
 #include <string>
 #include <vector>
 
-namespace lft {
-
-// Global position tracking state (shared across all phases)
-std::map<std::string, std::string>
-    position_strategies{}; // symbol -> strategy name
-std::map<std::string, double>
-    position_peaks{}; // symbol -> peak price for trailing stop
-std::map<std::string, std::chrono::system_clock::time_point>
-    position_entry_times{};
-
 // ═══════════════════════════════════════════════════════════════════════
 // DATA FETCHING AND ASSESSMENT
 // ═══════════════════════════════════════════════════════════════════════
@@ -290,5 +280,3 @@ bool is_market_hours(std::chrono::system_clock::time_point now) {
 
   return (current_time >= market_open and current_time < market_close);
 }
-
-} // namespace lft

@@ -7,8 +7,6 @@
 #include <string>
 #include <vector>
 
-namespace lft {
-
 // Strategy result indicating whether to buy and why
 struct StrategySignal {
     bool should_buy{false};
@@ -126,5 +124,3 @@ public:
     static double calculate_spread_bps(const Snapshot&);
     static double calculate_volume_ratio(const PriceHistory&);
 };
-
-} // namespace lft

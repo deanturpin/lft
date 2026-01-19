@@ -7,8 +7,6 @@
 
 using json = nlohmann::json;
 
-namespace lft {
-
 AlpacaClient::AlpacaClient()
     : api_key_{get_env_or_default("ALPACA_API_KEY", "")},
       api_secret_{get_env_or_default("ALPACA_API_SECRET", "")},
@@ -638,5 +636,3 @@ std::expected<MarketClock, AlpacaError> AlpacaClient::get_market_clock() {
     return std::unexpected(AlpacaError::ParseError);
   }
 }
-
-} // namespace lft

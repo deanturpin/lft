@@ -5,7 +5,7 @@
 int main() {
   std::println("🏦 Testing Account and Market Status Display\n");
 
-  auto client = lft::AlpacaClient{};
+  auto client = AlpacaClient{};
 
   // Display account information
   if (auto account_result = client.get_account()) {

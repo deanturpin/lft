@@ -11,8 +11,6 @@
 #include <string>
 #include <vector>
 
-namespace lft {
-
 void display_account_summary(AlpacaClient &client) {
   using namespace std::chrono;
   const auto summary_start = steady_clock::now();
@@ -94,5 +92,3 @@ void display_account_summary(AlpacaClient &client) {
   const auto total_duration = duration_cast<milliseconds>(steady_clock::now() - summary_start);
   std::println("  [DEBUG] Account summary time: {}ms", total_duration.count());
 }
-
-} // namespace lft

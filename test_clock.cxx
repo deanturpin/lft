@@ -4,7 +4,7 @@
 int main() {
   std::println("🕐 Testing Alpaca Clock API");
 
-  auto client = lft::AlpacaClient{};
+  auto client = AlpacaClient{};
 
   auto result = client.get_market_clock();
 

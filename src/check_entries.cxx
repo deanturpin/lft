@@ -13,14 +13,12 @@
 #include <string>
 #include <vector>
 
-namespace lft {
-
 // Exit parameters (shared with calibration)
 constexpr auto take_profit_pct = 0.02;    // 2%
 constexpr auto stop_loss_pct = 0.05;      // 5%
 constexpr auto trailing_stop_pct = 0.30;  // 30%
 
-// Import global tracking state (defined in lft.cxx)
+// Import global tracking state (defined in globals.cxx)
 extern std::map<std::string, std::string> position_strategies;
 extern std::map<std::string, double> position_peaks;
 extern std::map<std::string, std::chrono::system_clock::time_point> position_entry_times;
@@ -35,12 +33,12 @@ void check_entries(AlpacaClient &client,
     symbols_in_use.insert(pos.symbol);
 
   // Build price histories for relative strength (if strategy is enabled)
-  auto all_histories = std::map<std::string, lft::PriceHistory>{};
+  auto all_histories = std::map<std::string, PriceHistory>{};
   if (enabled_strategies.contains("relative_strength") and
       enabled_strategies.at("relative_strength")) {
     for (const auto &sym : stocks) {
       if (auto bars = client.get_bars(sym, "15Min", 100)) {
-        auto history = lft::PriceHistory{};
+        auto history = PriceHistory{};
         for (const auto &bar : *bars)
           history.add_bar(bar.close, bar.high, bar.low, bar.volume);
         all_histories[sym] = history;
@@ -88,17 +86,17 @@ void check_entries(AlpacaClient &client,
     }
 
     // Convert bars to PriceHistory
-    auto history = lft::PriceHistory{};
+    auto history = PriceHistory{};
     for (const auto &bar : bars)
       history.add_bar(bar.close, bar.high, bar.low, bar.volume);
 
     // Evaluate all strategies
-    auto signals = std::vector<lft::StrategySignal>{
-        lft::Strategies::evaluate_ma_crossover(history),
-        lft::Strategies::evaluate_mean_reversion(history),
-        lft::Strategies::evaluate_volatility_breakout(history),
-        lft::Strategies::evaluate_relative_strength(history, all_histories),
-        lft::Strategies::evaluate_volume_surge(history)
+    auto signals = std::vector<StrategySignal>{
+        Strategies::evaluate_ma_crossover(history),
+        Strategies::evaluate_mean_reversion(history),
+        Strategies::evaluate_volatility_breakout(history),
+        Strategies::evaluate_relative_strength(history, all_histories),
+        Strategies::evaluate_volume_surge(history)
     };
 
     // Find first enabled signal
@@ -154,5 +152,3 @@ void check_entries(AlpacaClient &client,
     }
   }
 }
-
-} // namespace lft

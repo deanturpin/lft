@@ -7,8 +7,6 @@
 #include <string>
 #include <vector>
 
-namespace lft {
-
 // Market assessment result
 struct MarketAssessment {
   std::string summary;
@@ -78,5 +76,3 @@ std::chrono::system_clock::time_point next_15_minute_bar(std::chrono::system_clo
 std::chrono::system_clock::time_point next_minute_at_35_seconds(std::chrono::system_clock::time_point);
 std::chrono::system_clock::time_point eod_cutoff_time(std::chrono::system_clock::time_point);
 bool is_market_hours(std::chrono::system_clock::time_point);
-
-} // namespace lft
