@@ -26,11 +26,6 @@ constexpr auto min_edge_bps =
 #include <vector>
 
 inline const auto stocks = std::vector<std::string>{
-    // Development watchlist (3 assets for faster testing)
-    "SPY",  // S&P 500
-    "QQQ",  // Nasdaq 100
-    "AAPL", // Apple
-    // Full production watchlist (commented out for dev)
     // Major indices (high liquidity, consistent data)
     "DIA", // Dow Jones Industrial Average
     "QQQ", // Nasdaq 100

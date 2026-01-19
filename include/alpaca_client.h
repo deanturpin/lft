@@ -51,6 +51,13 @@ struct Position {
     double unrealized_plpc{};
 };
 
+struct MarketClock {
+    std::string timestamp;    // Current server time (eastern)
+    bool is_open{};          // Whether market is currently open
+    std::string next_open;   // ISO timestamp of next market open
+    std::string next_close;  // ISO timestamp of next market close
+};
+
 enum class AlpacaError {
     NetworkError,
     AuthError,
@@ -107,6 +114,9 @@ public:
 
     // Get historic crypto bars
     std::expected<std::vector<Bar>, AlpacaError> get_crypto_bars(std::string_view, std::string_view, std::string_view, std::string_view);
+
+    // Get market clock (returns full clock data including next open/close times)
+    std::expected<MarketClock, AlpacaError> get_market_clock();
 
 private:
     std::string api_key_;

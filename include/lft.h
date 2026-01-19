@@ -30,18 +30,17 @@ struct StrategyStats;
 // Data fetching and assessment
 std::vector<Snapshot> fetch_snapshots(AlpacaClient &);
 std::map<std::string, std::vector<Bar>> fetch_bars(AlpacaClient &);
-MarketAssessment assess_market_conditions(const std::vector<Snapshot> &);
+MarketAssessment assess_market_conditions(AlpacaClient &, const std::vector<Snapshot> &);
 
 // Phase 1: Calibrate strategies on historic bar data
 // Returns map of strategy name -> enabled status
-std::map<std::string, bool> calibrate(const std::map<std::string, std::vector<Bar>> &);
+std::map<std::string, bool> calibrate(const std::map<std::string, std::vector<Bar>> &, double);
 
-// Phase 2: Evaluate entry signals for all symbols (every 1 minute)
-void evaluate_entries(AlpacaClient &, const std::map<std::string, bool> &,
-                      std::chrono::system_clock::time_point);
+// Phase 2: Evaluate entry signals for all symbols (every 15 minutes)
+void evaluate_entries(AlpacaClient &, const std::map<std::string, bool> &);
 
-// Phase 3: Check exit conditions for all positions (every 10 seconds)
-void check_exits(AlpacaClient &, std::chrono::system_clock::time_point);
+// Phase 3: Check exit conditions for all positions (every minute)
+void check_exits(AlpacaClient &);
 
 // Phase 4: Emergency liquidation of all equity positions (EOD)
 void liquidate_all(AlpacaClient &);

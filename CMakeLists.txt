@@ -69,13 +69,49 @@ add_library(alpaca_client STATIC
 target_link_libraries(alpaca_client PUBLIC httplib::httplib nlohmann_json::nlohmann_json)
 
 # Main executable (entry point: main.cxx)
-add_executable(lft src/main.cxx src/phases.cxx src/strategies.cxx)
+add_executable(lft
+    src/main.cxx
+    src/lft.cxx
+    src/calibrate.cxx
+    src/evaluate_entries.cxx
+    src/check_exits.cxx
+    src/liquidate.cxx
+    src/strategies.cxx
+)
 target_link_libraries(lft PRIVATE alpaca_client)
 
-# Test executable
-add_executable(lft_tests tests/test_phases.cxx src/phases.cxx src/strategies.cxx)
+# Test executables
+add_executable(lft_tests
+    tests/test_phases.cxx
+    src/lft.cxx
+    src/calibrate.cxx
+    src/evaluate_entries.cxx
+    src/check_exits.cxx
+    src/liquidate.cxx
+    src/strategies.cxx
+)
 target_link_libraries(lft_tests PRIVATE alpaca_client Catch2::Catch2WithMain)
+
+add_executable(lft_trading_tests
+    tests/test_trading_logic.cxx
+    src/lft.cxx
+    src/calibrate.cxx
+    src/evaluate_entries.cxx
+    src/check_exits.cxx
+    src/liquidate.cxx
+    src/strategies.cxx
+)
+target_link_libraries(lft_trading_tests PRIVATE alpaca_client Catch2::Catch2WithMain)
+
+# Clock API test (manual test executable)
+add_executable(test_clock test_clock.cxx)
+target_link_libraries(test_clock PRIVATE alpaca_client)
+
+# Account and market status test
+add_executable(test_account test_account.cxx)
+target_link_libraries(test_account PRIVATE alpaca_client)
 
 # Enable CTest
 enable_testing()
 add_test(NAME lft_tests COMMAND lft_tests)
+add_test(NAME lft_trading_tests COMMAND lft_trading_tests)
