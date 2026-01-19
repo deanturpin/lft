@@ -17,7 +17,7 @@ int main() {
   // Define session duration
   const auto session_start = std::chrono::system_clock::now();
   const auto session_end = lft::next_whole_hour(session_start);
-  const auto eod = lft::eod_cutoff_time(session_start); // 3:55 PM ET today
+  const auto eod = lft::eod_cutoff_time(session_start); // 3:50 PM ET today
 
   // Fetch 30 days of 15-minute bars for calibration
   std::println("📊 Fetching historical data...");
@@ -36,6 +36,12 @@ int main() {
   auto next_entry = lft::next_15_minute_bar(session_start);
   auto next_exit = lft::next_minute_at_35_seconds(session_start);
   auto liquidated = false;
+
+  // Display scheduled event times
+  std::println("\n⏰ Scheduled Events:");
+  std::println("  Next entry check:  {:%H:%M:%S}", std::chrono::floor<std::chrono::seconds>(next_entry));
+  std::println("  Next exit check:   {:%H:%M:%S}", std::chrono::floor<std::chrono::seconds>(next_exit));
+  std::println("  EOD liquidation:   {:%H:%M:%S}", std::chrono::floor<std::chrono::seconds>(eod));
 
   for (auto now = std::chrono::system_clock::now(); now < session_end;
        now = std::chrono::system_clock::now()) {
