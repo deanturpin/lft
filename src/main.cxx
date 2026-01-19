@@ -127,67 +127,67 @@ int main() {
         std::chrono::floor<std::chrono::seconds>(session_end),
         remaining.count());
 
+    // Market summary: Display current conditions (shows even when market closed)
+    lft::display_market_summary(client);
+
     // Check market hours using API (primary) with local calculation fallback
     auto clock_result = client.get_market_clock();
     auto is_open = false;
 
     if (clock_result) {
       is_open = clock_result->is_open;
-      std::println("📊 Market: {}", is_open ? "OPEN" : "CLOSED");
+      std::println("\n📊 Market: {}", is_open ? "OPEN" : "CLOSED");
       std::println("📅 Next open:  {}", to_local_time(clock_result->next_open));
       std::println("📅 Next close: {}",
                    to_local_time(clock_result->next_close));
 
       if (not is_open) {
+        std::this_thread::sleep_for(1min);
         continue;
       }
     } else {
-      // API check failed - fallback to local time calculation
-      std::println("⚠️  Clock API failed, using local time calculation");
+      // API check failed - fallback to local calculation
+      std::println("\n⚠️  Clock API failed, using local time calculation");
       is_open = lft::is_market_hours(now);
 
       if (not is_open) {
         std::println("⏰ Market closed (fallback check)");
+        std::this_thread::sleep_for(1min);
         continue;
       }
     }
 
-    if (liquidated)
-      continue;
+    if (not liquidated) {
 
-    // Show time until market close
-    const auto time_until_close =
-        std::chrono::duration_cast<std::chrono::minutes>(eod - now);
-    std::println("📈 Market open - closes in {}min", time_until_close.count());
+      // Show time until market close
+      const auto time_until_close =
+          std::chrono::duration_cast<std::chrono::minutes>(eod - now);
+      std::println("📈 Market open - closes in {}min",
+                   time_until_close.count());
 
-    // Liquidate all positions at the end of trading
-    if (now >= eod) {
-      std::println("🚨 EOD cutoff - liquidating all positions");
-      lft::liquidate_all(client);
-      liquidated = true;
-      continue;
-    }
+      // Liquidate all positions at the end of trading
+      if (now >= eod) {
+        std::println("🚨 EOD cutoff - liquidating all positions");
+        lft::liquidate_all(client);
+        liquidated = true;
+        continue;
+      }
 
-    // Market summary: Fetch and display current market conditions
-    std::println("\n📊 Market Summary:");
-    auto snapshots = lft::fetch_snapshots(client);
-    auto assessment = lft::assess_market_conditions(client, snapshots);
-    std::println("{}", assessment.summary);
+      // Check exits every minute at :35 (after bar recalculation)
+      if (now >= next_exit) {
+        std::println("📤 Checking exits at {:%H:%M:%S}",
+                     std::chrono::floor<std::chrono::seconds>(now));
+        lft::check_exits(client);
+        next_exit = lft::next_minute_at_35_seconds(now);
+      }
 
-    // Check exits every minute at :35 (after bar recalculation)
-    if (now >= next_exit) {
-      std::println("📤 Checking exits at {:%H:%M:%S}",
-                   std::chrono::floor<std::chrono::seconds>(now));
-      lft::check_exits(client);
-      next_exit = lft::next_minute_at_35_seconds(now);
-    }
-
-    // Check entries every 15 minutes (aligned to :00, :15, :30, :45)
-    if (now >= next_entry) {
-      std::println("📥 Evaluating entries at {:%H:%M:%S}",
-                   std::chrono::floor<std::chrono::seconds>(now));
-      lft::evaluate_entries(client, enabled_strategies);
-      next_entry = lft::next_15_minute_bar(now);
+      // Check entries every 15 minutes (aligned to :00, :15, :30, :45)
+      if (now >= next_entry) {
+        std::println("📥 Evaluating entries at {:%H:%M:%S}",
+                     std::chrono::floor<std::chrono::seconds>(now));
+        lft::evaluate_entries(client, enabled_strategies);
+        next_entry = lft::next_15_minute_bar(now);
+      }
     }
 
     // Sleep for 1 minute before next cycle

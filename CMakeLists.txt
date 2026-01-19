@@ -76,6 +76,7 @@ add_executable(lft
     src/evaluate_entries.cxx
     src/check_exits.cxx
     src/liquidate.cxx
+    src/summary.cxx
     src/strategies.cxx
 )
 target_link_libraries(lft PRIVATE alpaca_client)

@@ -45,6 +45,9 @@ void check_exits(AlpacaClient &);
 // Phase 4: Emergency liquidation of all equity positions (EOD)
 void liquidate_all(AlpacaClient &);
 
+// Market summary: Display current conditions with sparklines
+void display_market_summary(AlpacaClient &);
+
 // Timing helpers
 std::chrono::system_clock::time_point next_whole_hour(std::chrono::system_clock::time_point);
 std::chrono::system_clock::time_point next_15_minute_bar(std::chrono::system_clock::time_point);
