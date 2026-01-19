@@ -78,15 +78,14 @@ void display_account_summary(AlpacaClient &client) {
 
   // Show pending orders (useful when market is closed)
   if (auto orders_result = client.get_open_orders()) {
-    auto orders_json = nlohmann::json::parse(*orders_result);
-    if (orders_json.is_array() and not orders_json.empty()) {
-      std::println("\n⏳ Pending Orders:");
+    auto orders_json = nlohmann::json::parse(*orders_result, nullptr, false);
+    if (not orders_json.is_discarded() and orders_json.is_array() and not orders_json.empty()) {
+      std::println("\n⏳ Pending Orders: {}", orders_json.size());
       for (const auto &order : orders_json) {
         const auto symbol = order.value("symbol", "");
         const auto side = order.value("side", "");
         const auto status = order.value("status", "");
-        const auto notional = order.value("notional", "");
-        std::println("  {}  {}  {}  ${}", symbol, side, status, notional);
+        std::println("  {}  {}  ({})", symbol, side, status);
       }
     }
   }
