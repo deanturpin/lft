@@ -130,31 +130,22 @@ int main() {
     // Market summary: Display current conditions (shows even when market closed)
     lft::display_market_summary(client);
 
-    // Check market hours using API (primary) with local calculation fallback
+    // Check market hours
     auto clock_result = client.get_market_clock();
-    auto is_open = false;
+    if (not clock_result) {
+      std::println("\n⚠️  Clock API failed - skipping cycle");
+      std::this_thread::sleep_for(1min);
+      continue;
+    }
 
-    if (clock_result) {
-      is_open = clock_result->is_open;
-      std::println("\n📊 Market: {}", is_open ? "OPEN" : "CLOSED");
-      std::println("📅 Next open:  {}", to_local_time(clock_result->next_open));
-      std::println("📅 Next close: {}",
-                   to_local_time(clock_result->next_close));
+    const auto is_open = clock_result->is_open;
+    std::println("\n📊 Market: {}", is_open ? "OPEN" : "CLOSED");
+    std::println("📅 Next open:  {}", to_local_time(clock_result->next_open));
+    std::println("📅 Next close: {}", to_local_time(clock_result->next_close));
 
-      if (not is_open) {
-        std::this_thread::sleep_for(1min);
-        continue;
-      }
-    } else {
-      // API check failed - fallback to local calculation
-      std::println("\n⚠️  Clock API failed, using local time calculation");
-      is_open = lft::is_market_hours(now);
-
-      if (not is_open) {
-        std::println("⏰ Market closed (fallback check)");
-        std::this_thread::sleep_for(1min);
-        continue;
-      }
+    if (not is_open) {
+      std::this_thread::sleep_for(1min);
+      continue;
     }
 
     if (not liquidated) {
