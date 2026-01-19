@@ -71,6 +71,13 @@ MarketAssessment assess_market_conditions(AlpacaClient &client, const std::vecto
       // Fetch recent 1-minute bars for sparkline (1 day = enough for 10 recent bars)
       auto sparkline = std::string{};
       if (auto all_bars = client.get_bars(snap.symbol, "1Min", 1)) {
+        // Debug: Log bar count for first symbol only to avoid spam
+        static auto first_log = true;
+        if (first_log) {
+          std::println("  [DEBUG] Fetched {} 1-min bars for {}", all_bars->size(), snap.symbol);
+          first_log = false;
+        }
+
         if (all_bars->size() >= 2) {
           // Take only the last 10 bars (or fewer if less available)
           constexpr auto max_sparkline_bars = 10uz;

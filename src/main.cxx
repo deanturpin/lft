@@ -127,16 +127,6 @@ int main() {
         std::chrono::floor<std::chrono::seconds>(session_end),
         remaining.count());
 
-    // Fetch latest snapshots for all watchlist symbols
-    auto snapshots = lft::fetch_snapshots(client);
-
-    // Assess market conditions (spread, volume, volatility)
-    auto assessment = lft::assess_market_conditions(client, snapshots);
-    std::println("{}", assessment.summary);
-
-    // Prices fetched on a 1 minute cycle
-    std::this_thread::sleep_for(1min);
-
     // Check market hours using API (primary) with local calculation fallback
     auto clock_result = client.get_market_clock();
     auto is_open = false;
@@ -178,6 +168,12 @@ int main() {
       continue;
     }
 
+    // Market summary: Fetch and display current market conditions
+    std::println("\n📊 Market Summary:");
+    auto snapshots = lft::fetch_snapshots(client);
+    auto assessment = lft::assess_market_conditions(client, snapshots);
+    std::println("{}", assessment.summary);
+
     // Check exits every minute at :35 (after bar recalculation)
     if (now >= next_exit) {
       std::println("📤 Checking exits at {:%H:%M:%S}",
@@ -193,6 +189,9 @@ int main() {
       lft::evaluate_entries(client, enabled_strategies);
       next_entry = lft::next_15_minute_bar(now);
     }
+
+    // Sleep for 1 minute before next cycle
+    std::this_thread::sleep_for(1min);
   }
 
   std::println("\n✅ Session complete - exiting for restart");
