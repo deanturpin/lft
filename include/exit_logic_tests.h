@@ -20,9 +20,10 @@ constexpr auto stock_spread_bps = 2.0;   // 2 bps
 constexpr auto crypto_spread_bps = 10.0; // 10 bps
 
 // Exit parameters (from lft.cxx)
-constexpr auto take_profit_pct = 2_pc;
+constexpr auto take_profit_pct = 3_pc;
 constexpr auto stop_loss_pct = 2_pc;
 constexpr auto trailing_stop_pct = 1_pc;
+constexpr auto panic_stop_loss_pct = 3.5_pc;
 
 // Exit parameters in bps for comparison
 constexpr auto take_profit_bps = 200.0;   // 200 bps = 2%
@@ -34,7 +35,8 @@ static_assert(lft::near(lft::bps_to_percent(take_profit_bps), take_profit_pct),
               "Take profit: 200 bps = 2%");
 static_assert(lft::near(lft::bps_to_percent(stop_loss_bps), stop_loss_pct),
               "Stop loss: 200 bps = 2%");
-static_assert(lft::near(lft::bps_to_percent(trailing_stop_bps), trailing_stop_pct),
+static_assert(lft::near(lft::bps_to_percent(trailing_stop_bps),
+                        trailing_stop_pct),
               "Trailing stop: 100 bps = 1%");
 
 // Verify spread constants
@@ -116,9 +118,12 @@ constexpr double apply_spread(double mid_price, double spread_pct,
 }
 
 // Basic P&L calculation tests
-static_assert(lft::near(calc_pl_pct(100.0, 102.0), 0.02), "2% gain calculation");
-static_assert(lft::near(calc_pl_pct(100.0, 98.0), -0.02), "-2% loss calculation");
-static_assert(lft::near(calc_pl_pct(100.0, 100.0), 0.0), "No change calculation");
+static_assert(lft::near(calc_pl_pct(100.0, 102.0), 0.02),
+              "2% gain calculation");
+static_assert(lft::near(calc_pl_pct(100.0, 98.0), -0.02),
+              "-2% loss calculation");
+static_assert(lft::near(calc_pl_pct(100.0, 100.0), 0.0),
+              "No change calculation");
 
 // Noise calculation tests
 static_assert(lft::near(bar_noise(102.0, 98.0, 100.0), 0.04),
