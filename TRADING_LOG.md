@@ -333,6 +333,117 @@ This is **correct behaviour** - the system protected capital by refusing trades 
 
 ---
 
+## 2026-01-20 (Monday) - Main Branch
+
+### Summary
+
+**P&L:** -$125.78 (-0.13% on deployed capital)
+**Positions Opened:** 42
+**Positions Closed:** 42
+**Win Rate:** Not analyzed (detailed trade breakdown not available)
+**System Uptime:** Full
+**Market Status:** CLOSED (MLK Day Holiday)
+**Branch:** main
+**API Account:** Paper trading account #2 (higher balance)
+
+### Account Summary
+
+- **Starting Balance:** $98,237.80
+- **Ending Balance:** $98,112.02
+- **Peak Balance:** $98,282.81 at 5:00 PM ET (+$45.01)
+- **Low Balance:** $98,084.19 at 8:45 PM ET (-$153.61)
+- **Total Round Trips:** 42 trades
+
+### Market Conditions
+
+- MLK Day (Market Closed) - paper trading API still active
+- Significantly more trading activity than feature branch (42 vs 11 trades)
+- Different account with ~$98k balance vs ~$11k on feature branch
+
+### Key Differences from Feature Branch
+
+**Trade Volume:**
+
+- Main branch: 42 round trips
+- Feature branch: 11 round trips
+- **279% more trades on main branch**
+
+**P&L Comparison:**
+
+- Main branch: -$125.78 (-0.13%)
+- Feature branch: -$84.23 (-0.77%)
+- **Main branch lost more in absolute dollars but less in percentage terms**
+
+**Account Size:**
+
+- Main branch starting balance: $98,237.80
+- Feature branch starting balance: ~$11,000
+- **Main branch has 8.9× larger account**
+
+**Performance Analysis:**
+
+- Both branches were unprofitable on MLK Day
+- Main branch had better risk management (lower % loss despite more trades)
+- Feature branch showed worse percentage loss despite fewer trades
+- Main branch's larger account size may allow for better position sizing and risk distribution
+
+### Observations
+
+1. **Architecture Impact:** Main branch generated 3.8× more trading signals than feature/serial-architecture
+   - May indicate different entry logic or more aggressive signal generation
+   - Higher trade count but lower percentage loss suggests better risk per trade
+
+2. **Account Size Effect:** Larger account balance on main branch
+   - Better able to absorb losses proportionally
+   - May have different position sizing dynamics
+
+3. **Risk Management:** Despite 42 trades, main branch kept drawdown to just -0.13%
+   - Suggests effective position sizing or tighter stops
+   - Feature branch with only 11 trades lost -0.77%
+
+4. **Holiday Trading:** Both branches active despite market closure
+   - Paper trading API continues on holidays
+   - Real question: Would live trading behave the same?
+
+### Critical Incidents
+
+**None.** Clean operation on both branches.
+
+### Lessons Learned
+
+1. **Branch Comparison Methodology:** Different API accounts makes direct comparison difficult
+   - Feature branch uses account #1 (~$11k)
+   - Main branch uses account #2 (~$98k)
+   - Should use same account for fair comparison
+
+2. **Trade Quantity vs Quality:** More trades doesn't always mean worse results
+   - Main: 42 trades, -0.13%
+   - Feature: 11 trades, -0.77%
+   - Main branch achieved better percentage performance despite 4× trade volume
+
+3. **Architecture Differences:** Serial architecture (feature branch) appears more conservative
+   - Fewer entries but larger percentage loss per capital deployed
+   - May need to investigate entry criteria differences
+
+4. **Holiday Trading Analysis:** Both systems active on MLK Day
+   - Valuable for testing but not representative of real market conditions
+   - Consider adding holiday detection and disable trading
+
+### Action Items
+
+- [ ] Use same API account for branch comparisons to enable fair analysis
+- [ ] Investigate why main branch generates 3.8× more trades
+- [ ] Analyse entry criteria differences between branches
+- [ ] Compare strategy configurations between main and feature branches
+- [ ] Add holiday calendar check to prevent trading when markets closed
+- [ ] Consider merging better performing elements from both branches
+
+### Code Changes
+
+**None.** This was analysis-only session comparing existing branch performance.
+
+---
+
 ## Template for Future Days
 
 ```markdown
