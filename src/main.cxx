@@ -5,6 +5,103 @@
 #include <set>
 #include <thread>
 
+/*
+
+risk_off / riskOff (very common)
+
+panic_exit / panicExit (clear and blunt)
+
+kill_switch / killSwitch (common in trading systems)
+
+force_flat / forceFlat (describes exactly what happens)
+
+hard_exit / hardExit (contrasts with normal exits)
+
+
+Normal exits
+
+Usually called:
+
+strategy_exit / strategyExit
+
+managed_exit / managedExit
+
+soft_exit / softExit (only if you contrast with hard exits)
+
+or simply exits with reasons TP, SL, TSL
+
+I’d go with strategy_exit for clarity.
+
+
+enum class ExitReason {
+  TakeProfit,
+  StopLoss,
+  TrailingStop,
+  EodForceFlat,
+  KillSwitch,        // e.g. big loss / crash rule
+};
+
+  tp = 3
+  sl = 2
+  tsl = 1
+  kill switch sl =3.5
+
+  TP = +3%
+
+SL = −2%
+
+TSL = 1% (probably with delayed activation, but leaving that aside)
+
+EOD = 16:00 ET
+
+last entry = EOD − 30m
+
+force flat = EOD − 3m
+
+kill switch stop = (bigger than −2%, e.g. −3.5%); if you keep it at −2% it’s not
+a kill switch, it’s just SL
+
+
+  eod = 4pm
+  no_more_trades = eod - 30
+  liquidate = eod - 3
+
+  // entries (15 bar)
+  if (now < no_more_trades) {
+    // evaluate
+  }
+
+  // normal exits (15 bar)
+  if (tp/sl/tsl)
+
+  // emergency exits (1 bar)
+  if (now > liquidate or circuit break sl)
+
+
+
+  tp = 3;
+sl = 2;
+tsl = 1;
+
+eod = 16:00;
+last_entry_time = eod - 30min;
+force_flat_time = eod - 3min;
+
+// entries
+if (now < last_entry_time) {
+  // evaluate entries on 15m bar
+}
+
+// strategy exits (managed exits)
+if (tp_hit)  exit(ExitReason::TakeProfit);
+if (sl_hit)  exit(ExitReason::StopLoss);
+if (tsl_hit) exit(ExitReason::TrailingStop);
+
+// hard exits (risk-off / force-flat)
+if (now >= force_flat_time) exit_all(ExitReason::EodForceFlat);
+if (kill_switch_hit)        exit(ExitReason::KillSwitch);
+*/
+
 // LFT - Low Frequency Trader
 
 int main() {
@@ -50,9 +147,12 @@ int main() {
 
     // Display next scheduled event times
     std::println("\n⏰ Next Events:");
-    std::println("  Entries:      {:%H:%M:%S}", std::chrono::floor<std::chrono::seconds>(next_entry));
-    std::println("  Exits:        {:%H:%M:%S}", std::chrono::floor<std::chrono::seconds>(next_exit));
-    std::println("  Liquidation:  {:%H:%M:%S}", std::chrono::floor<std::chrono::seconds>(eod));
+    std::println("  Entries:      {:%H:%M:%S}",
+                 std::chrono::floor<std::chrono::seconds>(next_entry));
+    std::println("  Exits:        {:%H:%M:%S}",
+                 std::chrono::floor<std::chrono::seconds>(next_exit));
+    std::println("  Liquidation:  {:%H:%M:%S}",
+                 std::chrono::floor<std::chrono::seconds>(eod));
 
     // Display balances and positions
     display_account_summary(client);
