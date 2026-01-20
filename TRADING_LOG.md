@@ -333,6 +333,142 @@ This is **correct behaviour** - the system protected capital by refusing trades 
 
 ---
 
+## 2026-01-20 (Monday) - MLK Day
+
+### Summary
+
+**P&L:** -$84.23 (-0.77% on deployed capital)
+**Positions Opened:** 11
+**Positions Closed:** 11
+**Win Rate:** 2/11 (18%)
+**System Uptime:** Full
+**Market Status:** CLOSED (MLK Day Holiday)
+
+### Market Conditions
+
+**Holiday Trading (Paper Trading Only):**
+
+- Market closed for Martin Luther King Jr. Day
+- Paper trading API still active
+- All entries occurred 2:32-2:36 PM ET (near theoretical EOD)
+- All exits at 8:52-8:53 PM ET (after hours liquidation)
+- 6+ hour gap between entry and exit suggests late-day entries
+
+### Trade Results
+
+#### Winners (2/11 = 18%)
+
+- **GLD**: +$3.51 (+0.35%) - Gold held value
+- **TLT**: +$0.58 (+0.06%) - Treasury bonds slight gain
+
+#### Losers (9/11 = 82%)
+
+- **AAPL**: -$39.29 (-3.93%) ← Worst performer, nearly half of total loss
+- **AMZN**: -$9.65 (-0.97%)
+- **URA**: -$8.61 (-0.86%) - Uranium ETF
+- **VNQ**: -$7.99 (-0.80%) - Real estate
+- **GOOGL**: -$7.65 (-0.77%)
+- **SPY**: -$6.87 (-0.69%) - S&P 500 index
+- **QQQ**: -$5.05 (-0.51%) - Nasdaq 100 index
+- **DBA**: -$2.17 (-0.22%) - Agriculture
+- **SIVR**: -$1.05 (-0.11%) - Silver
+
+**Total Deployed Capital:** $10,999.89 (11 × ~$1000)
+**Total Realized:** $10,915.66
+**Net Loss:** -$84.23
+
+### Critical Incidents
+
+**None.** System operated cleanly:
+
+- All 11 positions entered successfully
+- All 11 positions liquidated at EOD
+- No duplicate orders
+- No API timeouts or freezes
+
+### Strategy Performance
+
+**Symbol Diversity:**
+
+- Indices: SPY, QQQ (both losers)
+- Tech: AAPL, GOOGL, AMZN (all losers)
+- Commodities: GLD (winner), SIVR (loser)
+- Bonds: TLT (winner)
+- Real Estate: VNQ (loser)
+- Sector ETFs: URA, DBA (both losers)
+
+**Entry Timing Issues:**
+
+- All entries at 2:32-2:36 PM ET (within 4 minutes)
+- Only 1.5 hours before market close (if market were open)
+- Limited time for positions to develop
+- Suggests calibration happened late or entries bunched
+
+**Exit Analysis:**
+
+- All exits triggered by EOD liquidation (8:52-8:53 PM)
+- No strategy-based exits (TP/SL/trailing stop)
+- All positions held for full duration (6+ hours)
+- Suggests strategies didn't hit their targets
+
+### Lessons Learned
+
+1. **Holiday Trading Risk:**
+   - Market closed but paper trading active
+   - May have different liquidity/behaviour than regular hours
+   - Question: Should system detect holidays and skip trading?
+
+2. **Win Rate Concerningly Low (18%):**
+   - Only 2 winners out of 11 trades
+   - Previous sessions: 27% (2026-01-13), 100% (2026-01-14 manual test)
+   - Needs investigation - are strategies poorly calibrated?
+
+3. **AAPL Dragged Performance:**
+   - Single worst trade cost -$39.29 (47% of total loss)
+   - Dropped 3.93% in ~6 hours
+   - Need to review: Was this an outlier or systematic issue?
+
+4. **Late Entry Timing:**
+   - All entries 2:32-2:36 PM ET
+   - Too late in day for meaningful profit opportunity
+   - Calibration should run earlier, or entries should spread throughout day
+
+5. **Lack of Intraday Exits:**
+   - No positions hit TP (2%) or SL (-5%)
+   - All held until forced liquidation
+   - Suggests either:
+     a) Price action was range-bound (positions didn't move enough)
+     b) Trailing stop (30%) was too wide to trigger
+
+6. **Index Performance:**
+   - Both SPY and QQQ were losers
+   - If broad market declined, individual stocks likely struggled too
+   - Suggests market conditions were unfavourable
+
+### Action Items for Tomorrow
+
+- [ ] Investigate why win rate dropped to 18%
+- [ ] Review AAPL entry conditions - why did it drop 3.93%?
+- [ ] Consider adding holiday detection to skip trading on closed days
+- [ ] Analyze entry timing - why all entries clustered at 2:32-2:36 PM?
+- [ ] Review calibration results to understand strategy signals
+- [ ] Consider earlier calibration timing for better entry distribution
+- [ ] Monitor if 30 bps spread filter is working (implemented 2026-01-14)
+
+### Code Changes
+
+**None.** This session used existing codebase from previous days.
+
+### Notes
+
+- First Monday session since 2026-01-13 (previous Mon was -$100 loss)
+- Market holiday may have affected price action/liquidity
+- Need to evaluate if paper trading on holidays is representative
+- System demonstrated clean operation (no bugs/crashes)
+- Loss was controlled but win rate is concerning trend
+
+---
+
 ## Template for Future Days
 
 ```markdown
