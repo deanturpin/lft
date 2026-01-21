@@ -448,58 +448,58 @@ This is **correct behaviour** - the system protected capital by refusing trades 
 
 ### Summary
 
-**P&L:** +$95.10 (+0.19%)
-**Positions Opened:** 29
-**Positions Closed:** 29
-**Win Rate:** 18/29 (62.1%)
+**P&L:** +$7.33 (+0.04%)
+**Positions Opened:** 17
+**Positions Closed:** 17
+**Win Rate:** 8/17 (47.1%)
 **System Uptime:** Full
 **Market Status:** OPEN (Regular trading day)
 
 ### Market Conditions
 
-**Active trading day:**
+**Lower activity day:**
 
-- All 29 positions entered and exited during regular session
+- 17 positions entered and exited during regular session
 - Mean reversion strategy dominated entries
-- Wide variety of symbols traded across all sectors
+- Lower deployment compared to typical days ($19k vs $49k)
 - EOD liquidation at 3:57 PM ET worked perfectly
-- First profitable day since 2026-01-14 (manual test)
+- Modest profit in challenging market conditions
 
 ### Trade Results
 
-#### Top 5 Winners (Total: +$144.76)
+#### Top 5 Winners (Total: +$53.89)
 
-1. **NVDA**: +$39.56 (+1.32%) - 3 round trips, consistent gains
-2. **META**: +$19.98 (+2.00%) - Hit take profit target
-3. **AMZN**: +$12.78 (+0.64%)
-4. **QQQ**: +$12.61 (+0.63%) - 2 round trips
-5. **ASML**: +$10.03 (+1.00%) - European semiconductors
+1. **GOOGL**: +$20.12 (+1.01%) - Tech strength
+2. **QQQ**: +$11.53 (+1.15%) - Nasdaq ETF outperformed
+3. **SPY**: +$8.36 (+0.84%) - S&P 500 positive
+4. **TSLA**: +$7.26 (+0.36%) - Tesla recovery
+5. **XOM**: +$6.53 (+0.65%) - Energy sector support
 
-#### Top 5 Losers (Total: -$55.07)
+#### Top 5 Losers (Total: -$44.76)
 
-1. **URA**: -$15.12 (-0.76%) - 2 round trips, uranium sector weak
-2. **NVO**: -$13.21 (-0.66%) - 2 round trips, healthcare
-3. **SIL**: -$11.43 (-0.38%) - 3 round trips, silver miners
-4. **JPM**: -$8.15 (-0.82%) - Financials
-5. **TSM**: -$7.16 (-0.36%) - 2 round trips, Taiwan Semi
+1. **SIVR**: -$17.21 (-1.72%) - Silver ETF weak, largest loss
+2. **URA**: -$7.29 (-0.73%) - Uranium sector continued weakness
+3. **NVO**: -$7.19 (-0.72%) - Healthcare pressure
+4. **TSM**: -$6.38 (-0.64%) - Taiwan Semi down
+5. **GLD**: -$6.27 (-0.63%) - Gold under pressure
 
 #### Other Notable Results
 
-- **Precious Metals Mixed**: GLD +$4.19, SLV +$6.40, SIVR +$5.88, SIL -$11.43
-- **Energy**: UNG +$7.56 (3 trades), URA -$15.12 (2 trades), USO +$3.17
-- **Tech**: AAPL +$3.60, GOOGL +$4.94, MSFT +$1.81 (all positive)
-- **Index ETFs**: SPY +$2.56, QQQ +$12.61, DIA +$2.13 (all positive)
+- **Precious Metals Weak**: GLD -$6.27, SIVR -$17.21 (both losses)
+- **Energy Mixed**: XOM +$6.53, URA -$7.29
+- **Tech Mixed**: GOOGL +$20.12, TSLA +$7.26, TSM -$6.38
+- **Index ETFs Strong**: SPY +$8.36, QQQ +$11.53 (both positive)
 
-**Total Deployed Capital:** $48,999.51
-**Total Returned:** $49,094.61
-**Net Profit:** +$95.10 (+0.19%)
+**Total Deployed Capital:** $18,999.81
+**Total Returned:** $19,007.14
+**Net Profit:** +$7.33 (+0.04%)
 
 ### Critical Incidents
 
-**None.** Cleanest operation day yet:
+**None.** Clean operation:
 
-- All 29 positions entered successfully
-- All 29 positions closed automatically at EOD
+- All 17 positions entered successfully
+- All 17 positions closed automatically at EOD
 - No duplicate orders
 - No API timeouts or freezes
 - Perfect EOD liquidation timing (3:57 PM ET)
@@ -507,88 +507,88 @@ This is **correct behaviour** - the system protected capital by refusing trades 
 
 ### Strategy Performance
 
-**Mean Reversion Strategy Dominated:**
+**Mean Reversion Strategy:**
 
 - Nearly all entries were mean_reversion signals
-- One ma_crossover (URA at 2:52 PM)
-- Strategy performing well in ranging market conditions
-- 62.1% win rate exceeds backtest target
+- Strategy challenged by mixed market conditions
+- 47.1% win rate below target (needs improvement)
 
-**Symbol Diversity (29 unique symbols):**
+**Symbol Diversity (17 unique symbols):**
 
-- Big Tech: AAPL, AMZN, GOOGL, META, MSFT, NVDA (all profitable)
-- Indices: DIA, QQQ, SPY (all profitable)
-- International: ASML, BABA, BRK.B, NVO, SAP, TSM
-- Commodities: GLD, SIL, SIVR, SLV (3/4 profitable)
-- Energy: UNG, URA, USO, XOM (3/4 profitable)
-- Bonds: IEF, TLT (both profitable)
-- Sectors: JPM, PG, VNQ
+- Big Tech: GOOGL, TSLA, TSM (2/3 profitable)
+- Indices: QQQ, SPY (both profitable)
+- International: NVO, TSM
+- Commodities: GLD, SIVR (both losses)
+- Energy: URA, XOM (mixed)
 
 **Entry Timing:**
 
-- Spread throughout trading day (2:30 PM - 3:55 PM ET)
-- Multiple entry windows used effectively
+- Spread throughout trading day
 - Mean reversion catching dips at various times
+- Fewer signals generated compared to typical days
 
 **Exit Analysis:**
 
 - All exits via EOD liquidation (3:57 PM ET)
-- No take profit hits except META (+2.00%)
-- Most positions held 1-3 hours before EOD
-- Suggests market was ranging, not trending strongly
+- No significant take profit hits
+- Most positions held for several hours before EOD
+- Winners and losers relatively balanced in magnitude
 
 ### Lessons Learned
 
-1. **Volume Ratio Display Working:**
-   - New column added yesterday showing volume as ratio of 20-bar average
-   - Helps identify low-liquidity situations
-   - System correctly filtering low-volume entries
+1. **Lower Deployment Analysis:**
+   - Only $19k deployed vs typical $49k
+   - Suggests fewer qualifying signals generated
+   - May indicate tighter market conditions or stricter filters working
+   - Account balance ~$98k, so capital availability not limiting factor
 
-2. **Win Rate Significantly Improved (62.1% vs 18% on Jan 20):**
-   - Yesterday (MLK Day): 18% win rate, -$84 loss
-   - Today (Regular Day): 62.1% win rate, +$95 profit
-   - Confirms holiday trading may have unusual characteristics
-   - Regular market conditions favour current strategies
+2. **Win Rate Below Target (47.1% vs 62.1% on other account):**
+   - Below 50% win rate concerning
+   - Needs investigation into signal quality
+   - Market conditions may have been less favourable for mean reversion
+   - Different account may have different entry timing or filters
 
-3. **Tech Sector Strength:**
-   - All big tech positions profitable (AAPL, AMZN, GOOGL, META, MSFT, NVDA)
-   - Combined tech P&L: +$91.45 (96% of total profit)
-   - NVDA particularly strong (+$39.56 across 3 trades)
+3. **Precious Metals Weakness:**
+   - Both GLD and SIVR were losers
+   - Combined loss: -$23.48
+   - Precious metals dragged down overall performance
+   - May need to reassess precious metals signals
 
-4. **Commodities Mixed Results:**
-   - Precious metals: 3/4 profitable (GLD, SLV, SIVR winners; SIL loser)
-   - Energy: 3/4 profitable (UNG, USO, XOM winners; URA loser)
-   - URA weakness dragged down overall commodity performance
+4. **Index ETFs Outperformed:**
+   - SPY +$8.36, QQQ +$11.53
+   - Combined: +$19.89 (271% of total profit)
+   - Broad market indices saved the day
+   - Individual stock selection underperformed vs indices
 
-5. **Position Sizing Advantage:**
-   - 29 positions × ~$1000 = $49k deployed
-   - +$95 profit = 0.19% return on deployed
-   - Winners larger than losers: +$144.76 vs -$55.07 (2.6:1 ratio)
-   - Validates risk/reward approach
+5. **Position Sizing Analysis:**
+   - 17 positions × ~$1000 = $19k deployed
+   - +$7.33 profit = 0.04% return on deployed
+   - Winners barely exceeded losers: +$53.89 vs -$44.76 (1.2:1 ratio)
+   - Risk/reward ratio needs improvement
 
-6. **Index ETFs as Market Barometer:**
-   - SPY, QQQ, DIA all profitable
-   - Suggests broad market was positive
-   - Individual stock selection added alpha (higher returns than indices)
+6. **Tech Sector Mixed:**
+   - GOOGL strong (+$20.12)
+   - TSLA positive (+$7.26)
+   - TSM negative (-$6.38)
+   - Tech not uniformly strong like other days
 
-7. **Mean Reversion in Ranging Markets:**
-   - Strategy thriving when market lacks strong trend
-   - 62% win rate with modest but consistent gains
-   - Average winner: +$8.04
-   - Average loser: -$5.01
-   - Payoff ratio: 1.6:1
+7. **Small Profit Better Than Loss:**
+   - +$7.33 keeps capital preserved
+   - Validates risk management
+   - System correctly avoided large losses
+   - Win rate needs improvement but downside protected
 
 ### Configuration Status
 
 **Current Settings (unchanged):**
 
-- Spread filter: 30 bps (working well)
+- Spread filter: 30 bps
 - Volume filter: 0.5x minimum ratio (showing in display)
 - Edge filter: 10 bps minimum
 - Position size: $1000 notional
 - Crypto: DISABLED (since 2026-01-13)
 
-**Display Enhancements (implemented yesterday):**
+**Display Enhancements:**
 
 - Volume ratio column showing current vs 20-bar average
 - Comprehensive status showing all blocking issues
@@ -596,31 +596,30 @@ This is **correct behaviour** - the system protected capital by refusing trades 
 
 ### Action Items for Tomorrow
 
-- [ ] Monitor if 62% win rate continues on regular trading days
-- [ ] Analyse why URA underperformed (2 losing trades)
-- [ ] Consider if tech sector bias is sustainable or temporary
-- [ ] Verify holiday vs regular day performance patterns
-- [ ] Track whether mean reversion continues to dominate entries
-- [ ] Consider re-enabling crypto after validating duplicate order fixes
+- [ ] Investigate why only 17 signals generated (vs typical 29)
+- [ ] Analyse precious metals weakness (both GLD and SIVR lost)
+- [ ] Review why win rate fell to 47.1% (below 50%)
+- [ ] Compare account configurations to understand deployment differences
+- [ ] Consider if stricter filtering is reducing both quantity and quality of trades
+- [ ] Monitor if lower win rate is temporary or trend
 
 ### Code Changes
 
-**None.** System running with yesterday's enhancements:
+**None.** System running with existing configuration:
 
 - Volume ratio display
 - Comprehensive status messages
 - Position data visibility improvements
-- WEAT removed from watchlist
 
 ### Notes
 
-- **First profitable regular trading day since going live**
-- Previous profitable session was Jan 14 (manual test trade only)
-- Clean operation validates recent architecture changes
-- Serial (single-threaded) design performing well
-- 15-minute bar strategy showing promise
-- 62.1% win rate exceeds 42% backtest calibration target
-- Tech sector contributing 96% of profits - warrants monitoring
+- **Modest profit preserved capital**
+- Lower deployment ($19k vs typical $49k) needs investigation
+- Win rate below 50% concerning - needs improvement
+- Index ETFs carried the day (contributed 271% of profits)
+- Precious metals weakness significant factor
+- Clean technical operation despite challenging market conditions
+- Risk management prevented significant losses
 
 ---
 
