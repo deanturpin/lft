@@ -1,5 +1,7 @@
 #pragma once
 
+namespace lft {
+
 // Trading parameters
 constexpr auto notional_amount = 1000.0;  // Dollar amount per trade
 constexpr auto calibration_days = 30;     // Duration for strategy calibration
@@ -24,46 +26,83 @@ constexpr auto min_edge_bps =
 #include <vector>
 
 inline const auto stocks = std::vector<std::string>{
-    // Major indices (high liquidity, consistent data)
-    "DIA", // Dow Jones Industrial Average
-    "QQQ", // Nasdaq 100
+    // =========================
+    // Broad indices / factors
+    // =========================
     "SPY", // S&P 500
-    // Big Tech (Magnificent Seven)
-    "AAPL",  // Apple - iPhone, Mac, Services
-    "AMZN",  // Amazon - E-commerce, AWS cloud
-    "GOOGL", // Alphabet (Google) - Search, ads, cloud
-    "META",  // Meta (Facebook) - Social media, ads
-    "MSFT",  // Microsoft - Software, Azure cloud, AI
-    "NVDA",  // NVIDIA - GPUs, AI chips
-    "TSLA",  // Tesla - Electric vehicles, energy
-    // International
+    "QQQ", // Nasdaq 100
+    "DIA", // Dow Jones Industrial Average
+    "IWM", // Russell 2000 (small caps, different behaviour)
+    "RSP", // Equal-weight S&P 500 (excellent mean reversion)
+    "XLK", // Technology sector
+    "XLF", // Financials sector
+
+    // =========================
+    // Big Tech / Growth
+    // =========================
+    "AAPL",  // Apple
+    "AMZN",  // Amazon
+    "GOOGL", // Alphabet
+    "META",  // Meta Platforms
+    "MSFT",  // Microsoft
+    "NVDA",  // NVIDIA
+    "TSLA",  // Tesla
+
+    // =========================
+    // Financials
+    // =========================
+    "JPM", // JPMorgan Chase
+    "BAC", // Bank of America
+    "GS",  // Goldman Sachs
+    "MS",  // Morgan Stanley
+
+    // =========================
+    // Healthcare (equities, not ETFs)
+    // =========================
+    "JNJ", // Johnson & Johnson
+    "UNH", // UnitedHealth Group
+    "PFE", // Pfizer
+    "LLY", // Eli Lilly
+
+    // =========================
+    // Consumer / defensives
+    // =========================
+    "PG",   // Procter & Gamble
+    "KO",   // Coca-Cola
+    "PEP",  // PepsiCo
+    "WMT",  // Walmart
+    "COST", // Costco
+
+    // =========================
+    // Industrials
+    // =========================
+    "CAT", // Caterpillar
+    "DE",  // Deere
+    "HON", // Honeywell
+    "GE",  // General Electric
+
+    // =========================
+    // Energy (equities only)
+    // =========================
+    "XOM", // Exxon Mobil
+    "CVX", // Chevron
+    "COP", // ConocoPhillips
+    "SLB", // Schlumberger
+
+    // =========================
+    // International equities
+    // =========================
     "ASML", // EU semiconductors
-    "BABA", // China e-commerce
-    "NVO",  // Healthcare (Denmark)
     "SAP",  // European software
     "TSM",  // Taiwan Semiconductor
-    // US sectors
-    "BRK.B", // Berkshire Hathaway (diversified value)
-    "JNJ",   // Healthcare
-    "JPM",   // Financials
-    "PG",    // Consumer staples
-    "XOM",   // Energy
-    // Commodities - Precious metals
-    "GLD",  // Gold
-    "SIL",  // Silver miners
-    "SLV",  // Silver (iShares)
-    "SIVR", // Silver (Aberdeen)
-    // Commodities - Energy
-    "UNG", // Natural gas
-    "URA", // Uranium miners
-    "USO", // Oil (United States Oil Fund)
-    // Commodities - Agriculture
-    "CORN", // Corn futures tracker
-    "DBA",  // Agriculture basket
-    // Bonds and real estate
-    "IEF", // Mid-term bonds
-    "TLT", // Long-term US bonds
-    "VNQ"  // Real estate
+    "NVO",  // Novo Nordisk (Denmark healthcare)
+
+    // =========================
+    // Bonds / real estate (equity-like ETFs)
+    // =========================
+    "IEF", // 7–10Y Treasuries
+    "TLT", // 20+Y Treasuries
+    "VNQ"  // US REITs
 };
 
 // TEMPORARILY DISABLED (2026-01-13): Triple AVAX positions detected
@@ -188,3 +227,5 @@ static_assert(slippage_buffer_bps + adverse_selection_bps <
 static_assert(
     slippage_buffer_bps + adverse_selection_bps + max_spread_bps_stocks < 100.0,
     "Total costs (spread + slippage + adverse) exceed 100 bps - unrealistic");
+
+} // namespace lft
