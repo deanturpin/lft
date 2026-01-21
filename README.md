@@ -7,6 +7,7 @@ A fully automated C++23 multi-strategy trading system for US equities, built on 
 ## Features
 
 ### Multi-Strategy Framework
+
 - 6 concurrent trading strategies evaluated every minute
 - Automatic calibration on 30 days of historic data with realistic spread simulation
 - Only enables profitable strategies based on backtest results
@@ -15,6 +16,7 @@ A fully automated C++23 multi-strategy trading system for US equities, built on 
 - Strategy parameters encoded in every order for full traceability
 
 ### Trading Strategies
+
 1. **Dip Buying** - Entry on 2% price drops
 2. **MA Crossover** - 5-period crosses 20-period moving average
 3. **Mean Reversion** - Price >2 standard deviations below MA
@@ -23,6 +25,7 @@ A fully automated C++23 multi-strategy trading system for US equities, built on 
 6. **Volume Surge** - 2x average volume with upward momentum >0.5%
 
 ### Automated Risk Management
+
 - **Adaptive TP/SL:** Widens targets in volatile conditions (3:1 signal-to-noise ratio)
 - **Volume confidence filtering:** Reduces signal confidence in low-volume periods
 - **Noise regime detection:** Disables momentum strategies in high noise (>1.5%), disables mean reversion in low noise (<0.5%)
@@ -32,6 +35,7 @@ A fully automated C++23 multi-strategy trading system for US equities, built on 
 - **Duplicate order prevention:** Checks both open positions and pending orders before placing new trades
 
 ### Fully Automated Operation
+
 - **Restart recovery:** Rebuilds state from Alpaca API after restarts
 - **Pending order tracking:** Prevents duplicate orders during 1-minute polling cycle
 - **Intraday equity trading:** Closes all stock positions before market close (3:55 PM ET)
@@ -76,6 +80,7 @@ scripts/
 ## Utility Scripts
 
 ### Fetch Order History
+
 ```bash
 # View recent orders in terminal
 ./scripts/fetch_orders.sh
@@ -88,21 +93,38 @@ Fetches last 7 days of orders (up to 500) with full details including strategy p
 
 ## Architecture Decisions
 
+### Serial (Single-Threaded) Architecture
+
+The system uses a **clean serial architecture** instead of multi-threading:
+
+- Single event loop in [src/main.cxx](src/main.cxx) handles all phases sequentially
+- No mutex/semaphore complexity or race conditions
+- Simpler to debug and maintain
+- Market data updates are infrequent (15-minute bars), making parallelism unnecessary
+- `thread_poc.cxx` remains in codebase as reference for potential future optimisation
+
+This architectural decision prioritises correctness and maintainability over theoretical performance gains that aren't needed for the current use case.
+
 ### State Management via Alpaca API
+
 All trade state is stored in Alpaca's API rather than local files:
+
 - **Strategy parameters** encoded in `client_order_id` field: `"strategy_name|tp:2.0|sl:-5.0|ts:0.5"`
 - **Position recovery** on restart by querying open positions and matching to order history
 - **No CSV parsing** required for state reconstruction
 - **Single source of truth** prevents state inconsistencies
 
 ### Duplicate Order Prevention
+
 The system tracks `symbols_in_use` by combining:
+
 1. Open positions from `/v2/positions`
 2. Pending orders from `/v2/orders?status=open`
 
 This prevents the race condition where orders placed during the 1-minute polling cycle would create duplicate positions (observed: 73 DOGE orders in one session before fix).
 
 ### Market Hours & EOD Liquidation
+
 - Trades US equities during regular hours (9:30 AM - 4:00 PM ET)
 - Auto-closes all equity positions at 3:55 PM ET
 - Crypto trades 24/7 (not affected by EOD liquidation)
@@ -111,6 +133,7 @@ This prevents the race condition where orders placed during the 1-minute polling
 ## Performance Observations
 
 From historical analysis of 500 orders over 7 days:
+
 - **Most traded:** DOGE/USD (73 orders), LINK/USD (49), SOL/USD (46)
 - **Duplicate bug impact:** ~30% of trades were duplicates before pending order check
 - **Strategy encoding:** Implemented Jan 12, 2026 (only latest orders have encoding)
@@ -146,12 +169,14 @@ The `crypto` vector in [include/defs.h](include/defs.h) remains (commented out) 
 ## Known Issues
 
 See [GitHub Issues](https://github.com/deanturpin/lft/issues) for active development:
+
 - [#30](https://github.com/deanturpin/lft/issues/30) WebSocket support for real-time updates (future enhancement)
 - [#31](https://github.com/deanturpin/lft/issues/31) Portfolio history export script
 
 ## Trading Performance
 
 Run `./scripts/fetch_orders.sh --csv` to analyze your trading history. The CSV includes:
+
 - Order timestamps and symbols
 - Buy/sell side with quantities and notional amounts
 - Fill status
