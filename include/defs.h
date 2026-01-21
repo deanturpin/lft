@@ -49,20 +49,7 @@ inline const auto stocks = std::vector<std::string>{
     "JNJ",   // Healthcare
     "JPM",   // Financials
     "PG",    // Consumer staples
-    "XOM",   // Energy
-    // Commodities - Precious metals
-    "GLD",  // Gold
-    "SIL",  // Silver miners
-    "SLV",  // Silver (iShares)
-    "SIVR", // Silver (Aberdeen)
-    // Commodities - Energy
-    "UNG", // Natural gas
-    "URA", // Uranium miners
-    "USO", // Oil (United States Oil Fund)
-    // Commodities - Agriculture
-    "CORN", // Corn futures tracker
-    "DBA",  // Agriculture basket
-    "WEAT", // Wheat
+    "XOM", // Energy
     // Bonds and real estate
     "IEF", // Mid-term bonds
     "TLT", // Long-term US bonds
