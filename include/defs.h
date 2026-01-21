@@ -7,6 +7,19 @@ constexpr auto notional_amount = 1000.0;  // Dollar amount per trade
 constexpr auto calibration_days = 30;     // Duration for strategy calibration
 constexpr auto min_trades_to_enable = 10; // Minimum trades to enable strategy
 
+// Exit parameters (3/2/1 pattern: TP 3%, SL 2%, TS 1%)
+constexpr auto take_profit_pct = 0.03;    // 3% take profit threshold
+constexpr auto stop_loss_pct = 0.02;      // 2% stop loss threshold
+constexpr auto trailing_stop_pct = 0.01;  // 1% trailing stop threshold
+
+// Exit parameter validation
+static_assert(take_profit_pct > 0.0, "Take profit must be positive");
+static_assert(stop_loss_pct > 0.0, "Stop loss must be positive");
+static_assert(trailing_stop_pct > 0.0, "Trailing stop must be positive");
+static_assert(trailing_stop_pct < stop_loss_pct, "Trailing stop should be < stop loss (usually)");
+static_assert(take_profit_pct >= stop_loss_pct, "Take profit should be >= stop loss (often sensible for MR)");
+static_assert(trailing_stop_pct <= take_profit_pct, "Trailing stop should be <= take profit (often sensible)");
+
 // Trade eligibility filters (Tier 1 - Must Do)
 constexpr auto max_spread_bps_stocks =
     30.0; // Max 30 bps (0.30%) spread for stocks

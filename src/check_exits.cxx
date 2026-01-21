@@ -7,10 +7,10 @@
 #include <print>
 #include <string>
 
-// Exit parameters (shared with other phases)
-constexpr auto take_profit_pct = 0.02;    // 2%
-constexpr auto stop_loss_pct = 0.05;      // 5%
-constexpr auto trailing_stop_pct = 0.30;  // 30%
+// Exit parameters - use centralized config from defs.h
+using lft::take_profit_pct;
+using lft::stop_loss_pct;
+using lft::trailing_stop_pct;
 
 // Import global tracking state (defined in globals.cxx)
 extern std::map<std::string, std::string> position_strategies;

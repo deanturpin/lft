@@ -13,10 +13,10 @@
 #include <string>
 #include <vector>
 
-// Exit parameters (shared with calibration)
-constexpr auto take_profit_pct = 0.02;    // 2%
-constexpr auto stop_loss_pct = 0.05;      // 5%
-constexpr auto trailing_stop_pct = 0.30;  // 30%
+// Exit parameters - use centralized config from defs.h
+using lft::take_profit_pct;
+using lft::stop_loss_pct;
+using lft::trailing_stop_pct;
 
 // Import global tracking state (defined in globals.cxx)
 extern std::map<std::string, std::string> position_strategies;
@@ -36,7 +36,7 @@ void check_entries(AlpacaClient &client,
   auto all_histories = std::map<std::string, PriceHistory>{};
   if (enabled_strategies.contains("relative_strength") and
       enabled_strategies.at("relative_strength")) {
-    for (const auto &sym : stocks) {
+    for (const auto &sym : lft::stocks) {
       if (auto bars = client.get_bars(sym, "15Min", 100)) {
         auto history = PriceHistory{};
         for (const auto &bar : *bars)
@@ -47,7 +47,7 @@ void check_entries(AlpacaClient &client,
   }
 
   // Evaluate each watchlist symbol
-  for (const auto &symbol : stocks) {
+  for (const auto &symbol : lft::stocks) {
     // Skip if already in position (from API or our tracking)
     if (symbols_in_use.contains(symbol) or position_strategies.contains(symbol))
       continue;
@@ -65,7 +65,7 @@ void check_entries(AlpacaClient &client,
     // Check spread filter
     const auto spread_bps = ((snapshot.latest_quote_ask - snapshot.latest_quote_bid) /
                              snapshot.latest_quote_bid) * 10000.0;
-    if (spread_bps > max_spread_bps_stocks) {
+    if (spread_bps > lft::max_spread_bps_stocks) {
       std::println("  {} - spread too wide ({:.1f} bps)", symbol, spread_bps);
       continue;
     }
@@ -79,7 +79,7 @@ void check_entries(AlpacaClient &client,
       const auto current_volume = bars.back().volume;
       const auto volume_ratio = current_volume / avg_volume;
 
-      if (volume_ratio < min_volume_ratio) {
+      if (volume_ratio < lft::min_volume_ratio) {
         std::println("  {} - low volume ({:.1f}% of average)", symbol, volume_ratio * 100.0);
         continue;
       }
@@ -109,7 +109,7 @@ void check_entries(AlpacaClient &client,
         continue;
 
       std::println("🚨 SIGNAL: {} - {} ({})", symbol, signal.strategy_name, signal.reason);
-      std::println("   Placing order for ${:.2f}...", notional_amount);
+      std::println("   Placing order for ${:.2f}...", lft::notional_amount);
 
       // Create unique client_order_id with timestamp
       const auto now = std::chrono::system_clock::now();
@@ -119,7 +119,7 @@ void check_entries(AlpacaClient &client,
           symbol, signal.strategy_name, timestamp_ms,
           take_profit_pct * 100.0, stop_loss_pct * 100.0, trailing_stop_pct * 100.0);
 
-      auto order = client.place_order(symbol, "buy", notional_amount, client_order_id);
+      auto order = client.place_order(symbol, "buy", lft::notional_amount, client_order_id);
       if (order) {
         // Parse order response to verify status
         auto order_json = nlohmann::json::parse(order.value(), nullptr, false);

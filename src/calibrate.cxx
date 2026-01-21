@@ -11,30 +11,12 @@
 #include <string_view>
 #include <vector>
 
-// Exit parameters (from exit_logic_tests.h concept)
-constexpr auto take_profit_pct = 0.02;   // 2%
-constexpr auto stop_loss_pct = 0.05;     // 5%
-constexpr auto trailing_stop_pct = 0.30; // 30%
-constexpr auto notional_per_trade = 1000.0;
-
-// Compile-time validation of exit parameters
-static_assert(take_profit_pct > 0.0, "Take profit must be positive");
-static_assert(take_profit_pct >= 0.01, "Take profit too small - min 1%");
-static_assert(take_profit_pct <= 0.10, "Take profit too large - max 10%");
-static_assert(stop_loss_pct > 0.0, "Stop loss must be positive");
-static_assert(stop_loss_pct >= 0.01, "Stop loss too small - min 1%");
-static_assert(stop_loss_pct <= 0.20, "Stop loss too large - max 20%");
-static_assert(stop_loss_pct >= take_profit_pct,
-              "Stop loss should be >= take profit (risk management)");
-static_assert(trailing_stop_pct > 0.0, "Trailing stop must be positive");
-static_assert(trailing_stop_pct >= 0.05, "Trailing stop too tight - min 5%");
-static_assert(trailing_stop_pct <= 0.50, "Trailing stop too loose - max 50%");
-static_assert(trailing_stop_pct >= take_profit_pct,
-              "Trailing stop should be >= take profit");
-static_assert(notional_per_trade > 0.0, "Trade size must be positive");
-static_assert(notional_per_trade >= 100.0, "Trade size too small - min $100");
-static_assert(notional_per_trade <= 10000.0,
-              "Trade size dangerously high - max $10k per trade");
+// Exit parameters - use centralized config from defs.h
+using lft::take_profit_pct;
+using lft::stop_loss_pct;
+using lft::trailing_stop_pct;
+using lft::notional_amount;
+constexpr auto notional_per_trade = notional_amount;
 
 namespace {
 

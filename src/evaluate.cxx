@@ -22,7 +22,7 @@ MarketEvaluation evaluate_market(AlpacaClient &client,
   // Build price histories for relative strength (if strategy is enabled)
   auto price_histories = std::map<std::string, PriceHistory>{};
   if (enabled_strategies.contains("relative_strength") and enabled_strategies.at("relative_strength")) {
-    for (const auto &symbol : stocks) {
+    for (const auto &symbol : lft::stocks) {
       if (auto bars = client.get_bars(symbol, "15Min", 100)) {
         auto &history = price_histories[symbol];
         for (const auto &bar : *bars) {
@@ -41,7 +41,7 @@ MarketEvaluation evaluate_market(AlpacaClient &client,
   auto network_failed = false;
 
   // Evaluate each watchlist symbol
-  for (const auto &symbol : stocks) {
+  for (const auto &symbol : lft::stocks) {
     auto eval = SymbolEvaluation{};
     eval.symbol = symbol;
 
@@ -97,8 +97,8 @@ MarketEvaluation evaluate_market(AlpacaClient &client,
     eval.edge_bps = min_edge_bps - total_costs_bps;
 
     // Check tradeability based on spread and volume
-    const auto spread_ok = eval.spread_bps > 0.0 and eval.spread_bps <= max_spread_bps_stocks;
-    const auto volume_ok = eval.volume_ratio >= min_volume_ratio;
+    const auto spread_ok = eval.spread_bps > 0.0 and eval.spread_bps <= lft::max_spread_bps_stocks;
+    const auto volume_ok = eval.volume_ratio >= lft::min_volume_ratio;
     eval.tradeable = spread_ok and volume_ok;
 
     // Build price history from bars (always evaluate strategies, even if spread/volume issues)
@@ -150,10 +150,10 @@ MarketEvaluation evaluate_market(AlpacaClient &client,
 
       if (eval.spread_bps == 0.0)
         issues.push_back("No quote");
-      else if (eval.spread_bps > max_spread_bps_stocks)
+      else if (eval.spread_bps > lft::max_spread_bps_stocks)
         issues.push_back(std::format("Spread {:.0f}bps", eval.spread_bps));
 
-      if (eval.volume_ratio > 0.0 and eval.volume_ratio < min_volume_ratio)
+      if (eval.volume_ratio > 0.0 and eval.volume_ratio < lft::min_volume_ratio)
         issues.push_back(std::format("Vol {:.2f}x", eval.volume_ratio));
 
       eval.status_summary = issues.empty() ? "Not tradeable" :
