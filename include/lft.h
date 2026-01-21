@@ -41,6 +41,7 @@ struct SymbolEvaluation {
   double price{};
   double spread_bps{};
   double edge_bps{};
+  double volume_ratio{};  // Current volume as ratio of 20-bar average
   bool tradeable{};
   bool ready_to_trade{};  // True if tradeable AND has at least one signal
   std::map<std::string, bool> strategy_signals;

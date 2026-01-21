@@ -60,7 +60,6 @@ inline const auto stocks = std::vector<std::string>{
     // Commodities - Agriculture
     "CORN", // Corn futures tracker
     "DBA",  // Agriculture basket
-    "WEAT", // Wheat
     // Bonds and real estate
     "IEF", // Mid-term bonds
     "TLT", // Long-term US bonds

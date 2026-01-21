@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <format>
 #include <map>
+#include <numeric>
 #include <print>
 #include <set>
 #include <string>
@@ -44,12 +45,8 @@ MarketEvaluation evaluate_market(AlpacaClient &client,
     auto eval = SymbolEvaluation{};
     eval.symbol = symbol;
 
-    // Skip if already in position
-    if (symbols_in_use.contains(symbol)) {
-      eval.status_summary = "In position";
-      result.symbols.push_back(eval);
-      continue;
-    }
+    // Track if we're in position (but continue to show market data)
+    const auto in_position = symbols_in_use.contains(symbol);
 
     // If network already failed on a previous symbol, don't spam more errors
     if (network_failed) {
@@ -82,6 +79,16 @@ MarketEvaluation evaluate_market(AlpacaClient &client,
       ++count;
     }
 
+    // Calculate volume ratio (current vs 20-bar average)
+    if (bars.size() >= 20) {
+      auto total_volume = 0.0;
+      for (auto i = bars.size() - 20; i < bars.size(); ++i)
+        total_volume += bars[i].volume;
+      const auto avg_volume = total_volume / 20.0;
+      const auto current_volume = bars.back().volume;
+      eval.volume_ratio = avg_volume > 0.0 ? current_volume / avg_volume : 0.0;
+    }
+
     // Calculate total trading costs
     const auto total_costs_bps = eval.spread_bps + slippage_buffer_bps + adverse_selection_bps;
 
@@ -89,10 +96,12 @@ MarketEvaluation evaluate_market(AlpacaClient &client,
     // Negative edge means costs exceed minimum required edge (unprofitable)
     eval.edge_bps = min_edge_bps - total_costs_bps;
 
-    // Check tradeability based on spread
-    eval.tradeable = eval.spread_bps > 0.0 and eval.spread_bps <= max_spread_bps_stocks;
+    // Check tradeability based on spread and volume
+    const auto spread_ok = eval.spread_bps > 0.0 and eval.spread_bps <= max_spread_bps_stocks;
+    const auto volume_ok = eval.volume_ratio >= min_volume_ratio;
+    eval.tradeable = spread_ok and volume_ok;
 
-    // Build price history from bars (always evaluate strategies, even if spread is wide)
+    // Build price history from bars (always evaluate strategies, even if spread/volume issues)
     auto history = PriceHistory{};
     for (const auto &bar : bars) {
       history.add_bar(bar.close, bar.high, bar.low, bar.volume);
@@ -131,11 +140,25 @@ MarketEvaluation evaluate_market(AlpacaClient &client,
       return p.second;
     });
 
-    eval.ready_to_trade = eval.tradeable and signal_count > 0;
+    eval.ready_to_trade = eval.tradeable and signal_count > 0 and not in_position;
 
-    if (not eval.tradeable) {
-      eval.status_summary = eval.spread_bps > max_spread_bps_stocks ?
-        "Spread too wide" : "No quote";
+    // Build comprehensive status showing all blocking issues
+    if (in_position) {
+      eval.status_summary = "In position";
+    } else if (not eval.tradeable) {
+      auto issues = std::vector<std::string>{};
+
+      if (eval.spread_bps == 0.0)
+        issues.push_back("No quote");
+      else if (eval.spread_bps > max_spread_bps_stocks)
+        issues.push_back(std::format("Spread {:.0f}bps", eval.spread_bps));
+
+      if (eval.volume_ratio > 0.0 and eval.volume_ratio < min_volume_ratio)
+        issues.push_back(std::format("Vol {:.2f}x", eval.volume_ratio));
+
+      eval.status_summary = issues.empty() ? "Not tradeable" :
+        std::accumulate(std::next(issues.begin()), issues.end(), issues[0],
+                       [](const auto& a, const auto& b) { return a + " + " + b; });
     } else if (signal_count > 0) {
       eval.status_summary = std::format("{} signals", signal_count);
     } else {
@@ -169,9 +192,9 @@ void display_evaluation(const MarketEvaluation &eval,
     if (enabled)
       strategy_names.push_back(name);
 
-  std::println("\n  Symbol   Price    Spread  Edge   Strategies  Ready  Status");
-  std::println("                     (bps)   (bps)");
-  std::println("  ──────────────────────────────────────────────────────────────────────");
+  std::println("\n  Symbol   Price    Spread  Edge   Vol    Strategies  Ready  Status");
+  std::println("                     (bps)   (bps)  Ratio");
+  std::println("  ────────────────────────────────────────────────────────────────────────────");
 
   for (const auto &s : eval.symbols) {
     // Build strategy indicator string (✓ or ✗ for each strategy)
@@ -187,7 +210,7 @@ void display_evaluation(const MarketEvaluation &eval,
 
     const auto ready_indicator = s.ready_to_trade ? "✓" : " ";
 
-    std::println("  {:7} ${:7.2f}  {:>6.0f}  {:>6.0f}  {:11} {:5}  {}",
-                 s.symbol, s.price, s.spread_bps, s.edge_bps, strategy_str, ready_indicator, s.status_summary);
+    std::println("  {:7} ${:7.2f}  {:>6.0f}  {:>6.0f}  {:>5.2f}  {:11} {:5}  {}",
+                 s.symbol, s.price, s.spread_bps, s.edge_bps, s.volume_ratio, strategy_str, ready_indicator, s.status_summary);
   }
 }
