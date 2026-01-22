@@ -204,17 +204,19 @@ int main() {
         evaluate_market(client, enabled_strategies, symbols_in_use);
     display_evaluation(evaluation, enabled_strategies, now);
 
-    // Check exits every minute at :35 (after bar recalculation)
+    // Check panic exits every minute at :35 (fast reaction to catastrophic losses)
     if (now >= next_exit) {
-      check_exits(client, now);
+      check_panic_exits(client, now);
       next_exit = next_minute_at_35_seconds(now);
     }
 
     // Execute entry trades every 15 minutes (aligned to :00, :15, :30, :45)
+    // Also check normal exits (TP/SL/trailing) at same frequency as entries
     if (now >= next_entry) {
       std::println("\n💼 Executing entry trades at {:%H:%M:%S}",
                    std::chrono::floor<std::chrono::seconds>(now));
       check_entries(client, enabled_strategies);
+      check_normal_exits(client, now);
       next_entry = next_15_minute_bar(now);
     }
     // }

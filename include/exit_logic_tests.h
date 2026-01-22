@@ -20,10 +20,6 @@ constexpr auto crypto_spread = 10.0 / 10000.0; // 10 basis points = 0.1%
 constexpr auto stock_spread_bps = 2.0;   // 2 bps
 constexpr auto crypto_spread_bps = 10.0; // 10 bps
 
-// Exit parameters - use centralized config from defs.h
-using lft::take_profit_pct;
-using lft::stop_loss_pct;
-using lft::trailing_stop_pct;
 constexpr auto panic_stop_loss_pct = 3.5_pc;
 
 // Exit parameters in bps for comparison (calculated from defs.h values)
@@ -32,18 +28,18 @@ constexpr auto stop_loss_bps = stop_loss_pct * 10000.0;         // 5% = 500 bps
 constexpr auto trailing_stop_bps = trailing_stop_pct * 10000.0; // 30% = 3000 bps
 
 // Verify bps constants match percentage constants
-static_assert(lft::near(lft::bps_to_percent(take_profit_bps), take_profit_pct),
+static_assert(near(bps_to_percent(take_profit_bps), take_profit_pct),
               "Take profit: 200 bps = 2%");
-static_assert(lft::near(lft::bps_to_percent(stop_loss_bps), stop_loss_pct),
+static_assert(near(bps_to_percent(stop_loss_bps), stop_loss_pct),
               "Stop loss: 200 bps = 2%");
-static_assert(lft::near(lft::bps_to_percent(trailing_stop_bps),
+static_assert(near(bps_to_percent(trailing_stop_bps),
                         trailing_stop_pct),
               "Trailing stop: 100 bps = 1%");
 
 // Verify spread constants
-static_assert(lft::near(lft::bps_to_percent(stock_spread_bps), stock_spread),
+static_assert(near(bps_to_percent(stock_spread_bps), stock_spread),
               "Stock spread: 2 bps = 0.02%");
-static_assert(lft::near(lft::bps_to_percent(crypto_spread_bps), crypto_spread),
+static_assert(near(bps_to_percent(crypto_spread_bps), crypto_spread),
               "Crypto spread: 10 bps = 0.1%");
 
 
@@ -99,11 +95,11 @@ constexpr double apply_spread(double mid_price, double spread_pct,
 }
 
 // Basic P&L calculation tests
-static_assert(lft::near(calc_pl_pct(100.0, 102.0), 0.02),
+static_assert(near(calc_pl_pct(100.0, 102.0), 0.02),
               "2% gain calculation");
-static_assert(lft::near(calc_pl_pct(100.0, 98.0), -0.02),
+static_assert(near(calc_pl_pct(100.0, 98.0), -0.02),
               "-2% loss calculation");
-static_assert(lft::near(calc_pl_pct(100.0, 100.0), 0.0),
+static_assert(near(calc_pl_pct(100.0, 100.0), 0.0),
               "No change calculation");
 
 // Take profit tests (3% target)
@@ -140,15 +136,15 @@ static_assert(!is_trailing_stop(boundary_peak, boundary_threshold,
               "(must cross below)");
 
 // Spread application tests (2 basis points = 0.02%)
-static_assert(lft::near(apply_spread(100.0, stock_spread, true), 100.01),
+static_assert(near(apply_spread(100.0, stock_spread, true), 100.01),
               "Buy stock at ask (mid + half spread)");
-static_assert(lft::near(apply_spread(100.0, stock_spread, false), 99.99),
+static_assert(near(apply_spread(100.0, stock_spread, false), 99.99),
               "Sell stock at bid (mid - half spread)");
 
 // Crypto spread tests (10 basis points = 0.1%)
-static_assert(lft::near(apply_spread(100.0, crypto_spread, true), 100.05),
+static_assert(near(apply_spread(100.0, crypto_spread, true), 100.05),
               "Buy crypto at ask");
-static_assert(lft::near(apply_spread(100.0, crypto_spread, false), 99.95),
+static_assert(near(apply_spread(100.0, crypto_spread, false), 99.95),
               "Sell crypto at bid");
 
 // Realistic scenario: Entry at $100, peaked at $102, now at $101

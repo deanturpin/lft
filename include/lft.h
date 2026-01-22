@@ -62,8 +62,11 @@ void display_evaluation(const MarketEvaluation &, const std::map<std::string, bo
 // Phase 2: Check entry signals and execute trades (every 15 minutes)
 void check_entries(AlpacaClient &, const std::map<std::string, bool> &);
 
-// Phase 3: Check exit conditions for all positions (every minute)
-void check_exits(AlpacaClient &, std::chrono::system_clock::time_point);
+// Phase 3a: Check normal exit conditions (TP/SL/trailing - every 15 minutes)
+void check_normal_exits(AlpacaClient &, std::chrono::system_clock::time_point);
+
+// Phase 3b: Check panic exit conditions (every 1 minute - fast reaction)
+void check_panic_exits(AlpacaClient &, std::chrono::system_clock::time_point);
 
 // Phase 4: Emergency liquidation of all equity positions (EOD)
 void liquidate_all(AlpacaClient &);

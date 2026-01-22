@@ -21,7 +21,7 @@
 std::vector<Snapshot> fetch_snapshots(AlpacaClient &client) {
   auto snapshots = std::vector<Snapshot>{};
 
-  for (const auto &symbol : lft::stocks) {
+  for (const auto &symbol : stocks) {
     if (auto snapshot = client.get_snapshot(symbol))
       snapshots.push_back(*snapshot);
   }
@@ -132,7 +132,7 @@ assess_market_conditions(AlpacaClient &client,
   const auto avg_spread_bps = total_spread_bps / static_cast<double>(count);
   const auto tradeable_count =
       std::ranges::count_if(symbols, [](const auto &s) {
-        return s.spread_bps <= lft::max_spread_bps_stocks;
+        return s.spread_bps <= max_spread_bps_stocks;
       });
 
   // Build summary with table
@@ -149,7 +149,7 @@ assess_market_conditions(AlpacaClient &client,
   const auto display_count = std::min(15uz, symbols.size());
   for (auto i = 0uz; i < display_count; ++i) {
     const auto &s = symbols[i];
-    const auto status = s.spread_bps <= lft::max_spread_bps_stocks ? "✓" : "✗";
+    const auto status = s.spread_bps <= max_spread_bps_stocks ? "✓" : "✗";
 
     summary += std::format("  {:7} ${:7.2f}  {:>6.2f}%  {}  {:>5.0f}bp  {}\n",
                            s.symbol, s.price, s.daily_change_pct, s.sparkline,
@@ -167,14 +167,14 @@ std::map<std::string, std::vector<Bar>> fetch_bars(AlpacaClient &client) {
   auto all_bars = std::map<std::string, std::vector<Bar>>{};
 
   std::println("  Fetching {} days of 15-min bars for {} symbols...",
-               lft::calibration_days, lft::stocks.size());
+               calibration_days, stocks.size());
 
   auto fetched = 0uz;
-  for (const auto &symbol : lft::stocks) {
-    if (auto bars = client.get_bars(symbol, "15Min", lft::calibration_days)) {
+  for (const auto &symbol : stocks) {
+    if (auto bars = client.get_bars(symbol, "15Min", calibration_days)) {
       all_bars[symbol] = *bars;
       ++fetched;
-      std::println("    {}/{}: {} ({} bars)", fetched, lft::stocks.size(), symbol,
+      std::println("    {}/{}: {} ({} bars)", fetched, stocks.size(), symbol,
                    bars->size());
     }
   }

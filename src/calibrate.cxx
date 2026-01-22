@@ -11,13 +11,6 @@
 #include <string_view>
 #include <vector>
 
-// Exit parameters - use centralized config from defs.h
-using lft::take_profit_pct;
-using lft::stop_loss_pct;
-using lft::trailing_stop_pct;
-using lft::notional_amount;
-constexpr auto notional_per_trade = notional_amount;
-
 namespace {
 
 // Run backtest for a single strategy across all symbols
@@ -76,6 +69,7 @@ StrategyStats run_backtest_for_strategy(
         const auto should_exit =
             (pl_pct >= take_profit_pct) or // Take profit
             (pl_pct <= -stop_loss_pct) or  // Stop loss
+            (pl_pct <= -panic_stop_loss_pct) or // Panic stop (safety net)
             (current_price <
              pos.peak_price * (1.0 - trailing_stop_pct)); // Trailing stop
 
@@ -97,7 +91,7 @@ StrategyStats run_backtest_for_strategy(
       }
 
       // Check entry signals (only if no position and enough cash)
-      if (not positions.contains(symbol) and cash >= notional_per_trade and
+      if (not positions.contains(symbol) and cash >= notional_amount and
           history.prices.size() >= 20) {
 
         // Evaluate strategy signal
@@ -119,7 +113,7 @@ StrategyStats run_backtest_for_strategy(
         if (signal.should_buy and signal.confidence >= 0.7) {
           // Enter position
           const auto entry_price = bar.close;
-          const auto quantity = notional_per_trade / entry_price;
+          const auto quantity = notional_amount / entry_price;
 
           positions[symbol] = BacktestPosition{
               .symbol = symbol,
@@ -195,6 +189,12 @@ calibrate(const std::map<std::string, std::vector<Bar>> &all_bars,
 
   // Print summary table
   std::println("\n📊 Calibration complete:");
+  std::println("\n  Exit Criteria:");
+  std::println("    Take Profit:  {:.1f}%", take_profit_pct * 100.0);
+  std::println("    Stop Loss:    {:.1f}%", stop_loss_pct * 100.0);
+  std::println("    Panic Stop:   {:.1f}%", panic_stop_loss_pct * 100.0);
+  std::println("    Trailing:     {:.1f}%\n", trailing_stop_pct * 100.0);
+
   auto enabled_count = 0uz;
   for (const auto &strategy : strategies) {
     const auto &stats = strategy_stats[strategy];
