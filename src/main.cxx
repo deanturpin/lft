@@ -153,12 +153,10 @@ int main() {
 
     // Display next scheduled event times
     std::println("\n⏰ Next Events:");
-    std::println("  Entries:      {:%H:%M:%S}",
+    std::println("  Strategy Cycle:  {:%H:%M:%S}  (entries + TP/SL/trailing)",
                  std::chrono::floor<std::chrono::seconds>(next_entry));
-    std::println("  Exits:        {:%H:%M:%S}",
+    std::println("  Panic Check:     {:%H:%M:%S}  (panic stops + EOD liquidation)",
                  std::chrono::floor<std::chrono::seconds>(next_exit));
-    std::println("  Liquidation:  {:%H:%M:%S}",
-                 std::chrono::floor<std::chrono::seconds>(eod));
 
     // Display balances and positions
     display_account_summary(client);
@@ -172,25 +170,14 @@ int main() {
       continue;
     }
 
-    // if (not liquidated) {
-
-    // Show time until market close
+    // Show time until EOD cutoff
     const auto time_until_close = eod - now;
     const auto hours =
         std::chrono::duration_cast<std::chrono::hours>(time_until_close);
     const auto minutes = std::chrono::duration_cast<std::chrono::minutes>(
         time_until_close - hours);
-    std::println("📈 Market open - closes in {}h {}min", hours.count(),
+    std::println("📈 Market open - EOD cutoff in {}h {}min", hours.count(),
                  minutes.count());
-
-    // Liquidate all positions at the end of trading
-    if (now >= eod) {
-      std::println("🚨 EOD cutoff - liquidating all positions");
-      liquidate_all(client);
-      // liquidated = true;
-      std::this_thread::sleep_for(10min);
-      continue;
-    }
 
     // Get current positions for evaluation
     auto positions = client.get_positions();
@@ -204,9 +191,9 @@ int main() {
         evaluate_market(client, enabled_strategies, symbols_in_use);
     display_evaluation(evaluation, enabled_strategies, now);
 
-    // Check panic exits every minute at :35 (fast reaction to catastrophic losses)
+    // Check panic exits every minute at :35 (fast reaction to all emergency conditions)
     if (now >= next_exit) {
-      check_panic_exits(client, now);
+      check_panic_exits(client, now, eod);
       next_exit = next_minute_at_35_seconds(now);
     }
 

@@ -93,6 +93,27 @@ double PriceHistory::volatility() const {
     return std::sqrt(variance / returns.size());
 }
 
+double PriceHistory::price_std_dev(size_t periods) const {
+    if (prices.size() < periods)
+        return 0.0;
+
+    // Calculate mean of price series
+    auto sum = 0.0;
+    for (auto i = prices.size() - periods; i < prices.size(); ++i)
+        sum += prices[i];
+    auto mean_price = sum / periods;
+
+    // Calculate variance of prices
+    auto variance = 0.0;
+    for (auto i = prices.size() - periods; i < prices.size(); ++i) {
+        auto diff = prices[i] - mean_price;
+        variance += diff * diff;
+    }
+
+    // Return standard deviation of prices
+    return std::sqrt(variance / periods);
+}
+
 double PriceHistory::recent_noise(size_t periods) const {
     if (highs.size() < periods or lows.size() < periods or prices.size() < periods)
         return 0.0;
@@ -214,14 +235,14 @@ StrategySignal Strategies::evaluate_mean_reversion(const PriceHistory& history) 
 
     auto current_price = history.prices.back();
     auto ma = history.moving_average(20);
-    auto std_dev = history.volatility();
+    auto std_dev = history.price_std_dev(20);  // Fixed: use price std dev, not return volatility
 
     // Defensive assertions: validate statistical values
     assert(std::isfinite(current_price) && current_price > 0.0 && "Current price must be positive and finite");
     assert(std::isfinite(ma) && ma > 0.0 && "MA must be positive and finite");
     assert(std::isfinite(std_dev) && std_dev >= 0.0 && "Std dev must be non-negative and finite");
 
-    // If volatility is too low (near zero), mean reversion strategy doesn't apply
+    // If price std dev is too low (near zero), mean reversion strategy doesn't apply
     if (std_dev < 0.0001)
         return signal;
 

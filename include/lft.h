@@ -66,7 +66,8 @@ void check_entries(AlpacaClient &, const std::map<std::string, bool> &);
 void check_normal_exits(AlpacaClient &, std::chrono::system_clock::time_point);
 
 // Phase 3b: Check panic exit conditions (every 1 minute - fast reaction)
-void check_panic_exits(AlpacaClient &, std::chrono::system_clock::time_point);
+// Includes: catastrophic loss stops, EOD liquidation
+void check_panic_exits(AlpacaClient &, std::chrono::system_clock::time_point, std::chrono::system_clock::time_point);
 
 // Phase 4: Emergency liquidation of all equity positions (EOD)
 void liquidate_all(AlpacaClient &);

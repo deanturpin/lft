@@ -1,11 +1,14 @@
 // Phase 3: Exit Checking
 // Split into two functions:
 // - check_normal_exits: TP/SL/trailing (every 15 minutes, same as entries)
-// - check_panic_exits: Panic stop only (every 1 minute, fast reaction)
+// - check_panic_exits: Emergency conditions (every 1 minute, fast reaction):
+//   1. Catastrophic position loss (panic stop)
+//   2. EOD time cutoff reached
 
 #include "lft.h"
 #include "defs.h"
 #include <map>
+#include <nlohmann/json.hpp>
 #include <print>
 #include <string>
 
@@ -85,8 +88,42 @@ void check_normal_exits(AlpacaClient &client, std::chrono::system_clock::time_po
   }
 }
 
-// Phase 3b: Panic exits only - checked every 1 minute for fast reaction
-void check_panic_exits(AlpacaClient &client, std::chrono::system_clock::time_point) {
+// Phase 3b: Panic exits - checked every 1 minute for fast reaction
+// Handles EOD liquidation and catastrophic loss stops
+void check_panic_exits(AlpacaClient &client,
+                      std::chrono::system_clock::time_point now,
+                      std::chrono::system_clock::time_point eod_cutoff) {
+
+  // Check if past EOD cutoff - liquidate all positions immediately
+  if (now >= eod_cutoff) {
+    const auto positions = client.get_positions();
+
+    if (positions.empty())
+      return;
+
+    std::println("\n🚨 EOD CUTOFF - Liquidating all positions at {:%H:%M:%S}",
+                 std::chrono::floor<std::chrono::seconds>(now));
+
+    // Close all positions
+    for (const auto &pos : positions) {
+      std::println("   Closing {} (${:+.2f})", pos.symbol, pos.unrealized_pl);
+
+      if (client.close_position(pos.symbol)) {
+        std::println("   ✅ {} closed", pos.symbol);
+
+        // Clean up tracking
+        position_strategies.erase(pos.symbol);
+        position_peaks.erase(pos.symbol);
+        position_entry_times.erase(pos.symbol);
+      } else {
+        std::println("   ❌ Failed to close {}", pos.symbol);
+      }
+    }
+
+    return;
+  }
+
+  // Check individual position panic stops
   const auto positions = client.get_positions();
 
   if (positions.empty())
@@ -99,7 +136,7 @@ void check_panic_exits(AlpacaClient &client, std::chrono::system_clock::time_poi
       const auto cost_basis = pos.avg_entry_price * pos.qty;
       const auto pl_pct = (unrealized_pl / cost_basis);
 
-      // Only check panic stop (catastrophic loss)
+      // Check individual panic stop (catastrophic loss on this position)
       const auto panic_stop_triggered = pl_pct <= -panic_stop_loss_pct;
 
       if (panic_stop_triggered) {
