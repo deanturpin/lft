@@ -41,6 +41,67 @@ A fully automated C++23 multi-strategy trading system for US equities, built on 
 - **Intraday equity trading:** Closes all stock positions before market close (3:55 PM ET)
 - **No manual intervention required**
 
+## Trading Cycle Architecture
+
+```mermaid
+gantt
+    title LFT Trading Cycles
+    dateFormat HH:mm
+    axisFormat %H:%M
+
+    section Market Hours
+    Market Open (9:30 ET)           :milestone, 09:30, 0m
+    Breakfast Breakout Window       :active, 09:30, 30m
+    Normal Trading                  :active, 10:00, 5h30m
+    No More Entries (3:30 ET)       :milestone, 15:30, 0m
+    Force Flat Window               :crit, 15:30, 20m
+    Market Close (4:00 ET)          :milestone, 16:00, 0m
+
+    section 1-Minute Cycle
+    Panic Checks (every :35)        :done, 09:35, 6h25m
+    Force Flat Liquidation          :crit, 15:50, 10m
+    Panic Stop Loss (6%)            :done, 09:35, 6h25m
+    EOD Cutoff Check (3:50 ET)      :crit, 15:50, 10m
+
+    section 15-Minute Cycle
+    Normal Entry Signals            :active, 09:45, 5h45m
+    Normal Exits (TP/SL/Trailing)   :active, 09:45, 5h45m
+
+    section 60-Minute Cycle
+    Re-calibration (every hour)     :done, 10:00, 6h
+```
+
+### Timing Breakdown
+
+#### 1-Minute Bar (Panic Cycle)
+
+Runs every minute at :35 seconds
+
+- Force flat liquidation (EOD cutoff: 3:50 PM ET)
+- Panic stop loss (6% catastrophic loss)
+- Risk-off state check (future feature)
+
+#### 15-Minute Bar (Strategy Cycle)
+
+Runs at :00, :15, :30, :45
+
+- Normal entry signals (all strategies)
+- Normal exits (TP: 100%, SL: 3%, Trailing: 2%)
+
+#### 60-Minute Bar (Calibration Cycle)
+
+Runs at whole hour
+
+- Strategy recalibration on 30 days of historic data
+- Enable/disable strategies based on profitability
+
+#### Key Times (Eastern Time)
+
+- **9:30 AM** - Market open, breakfast breakout opportunities
+- **3:30 PM** - No more new entries allowed
+- **3:50 PM** - Force flat: panic cycle liquidates all positions
+- **4:00 PM** - Market close
+
 ## Quick Start
 
 ```bash
@@ -63,7 +124,7 @@ make run
 
 ## Project Structure
 
-```
+```text
 src/
   lft.cxx           - Main trading loop with auto-calibration
   alpaca_client.cxx - Alpaca API integration (market data, orders, positions)
