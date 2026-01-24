@@ -104,6 +104,15 @@ Runs at whole hour
 
 ## Quick Start
 
+### Prerequisites
+
+- CMake 3.25+
+- C++23 compatible compiler (GCC 13+, Clang 16+, or Apple Clang 15+)
+- Internet connection (for FetchContent to download dependencies)
+- Alpaca Markets API keys ([sign up free](https://app.alpaca.markets/signup))
+
+### Build and Run
+
 ```bash
 # Configure API credentials
 cp .env.example .env
@@ -113,6 +122,81 @@ cp .env.example .env
 source .env
 make run
 ```
+
+### What You Should See
+
+#### Phase 1: Calibration
+
+```text
+🚀 LFT - Low Frequency Trader V2
+📊 Fetching historical data...
+🎯 Calibrating strategies with $100000.00 starting capital...
+
+  Using starting capital: $100000.00
+
+  🔧 Testing ma_crossover...
+     ✓ Complete - 45 trades, $234.56 P&L
+  🔧 Testing mean_reversion...
+     ✓ Complete - 67 trades, $456.78 P&L
+  ...
+
+📊 Calibration complete:
+
+  Exit Criteria:
+    Take Profit:  100.0%
+    Stop Loss:    3.0%
+    Panic Stop:   6.0%
+    Trailing:     2.0%
+
+  ma_crossover         ENABLED  P&L=$  234.56 WR= 56.2%
+  mean_reversion       ENABLED  P&L=$  456.78 WR= 61.3%
+  ...
+
+  3 of 5 strategies enabled for live trading
+```
+
+#### Phase 2: Live Trading
+
+```text
+🔄 Starting event loop until 11:00:00
+
+10:00:35 | Session ends: 11:00:00 | Remaining: 59 min
+
+⏰ Next Events:
+  Strategy Cycle:  10:15:00  (entries + TP/SL/trailing)
+  Panic Check:     10:01:35  (panic stops + EOD liquidation)
+
+💰 Account Summary:
+  Cash:       $95,123.45
+  Equity:     $99,876.54
+  Positions:  4
+  ...
+```
+
+If a strategy fires, you'll see:
+
+```text
+🚨 SIGNAL: AAPL - mean_reversion (Price -2.3σ below MA)
+   Placing order for $1000.00...
+✅ Order placed: ID=abc123 status=filled side=buy notional=$1000
+```
+
+### Troubleshooting
+
+#### "ALPACA_API_KEY and ALPACA_API_SECRET must be set"
+
+- Make sure you ran `source .env`
+
+#### Network errors
+
+- Check your internet connection
+- Verify API keys are correct
+- Ensure you're using paper trading URL
+
+#### Compilation errors
+
+- Check C++23 support: `g++ --version` or `clang++ --version`
+- Make sure CMake is 3.25+: `cmake --version`
 
 ## Tech Stack
 
@@ -234,6 +318,48 @@ See [GitHub Issues](https://github.com/deanturpin/lft/issues) for active develop
 - [#30](https://github.com/deanturpin/lft/issues/30) WebSocket support for real-time updates (future enhancement)
 - [#31](https://github.com/deanturpin/lft/issues/31) Portfolio history export script
 
+## Testing
+
+The system includes comprehensive compile-time and runtime tests.
+
+### Run All Tests
+
+```bash
+# Build and run all tests
+make && ctest --output-on-failure
+```
+
+### Test Coverage
+
+**Compile-Time Tests** (~160 assertions via `static_assert`):
+
+- Parameter validation ([include/defs.h](include/defs.h))
+- Exit logic calculations ([include/exit_criteria.h](include/exit_criteria.h))
+- Helper function correctness
+
+**Runtime Tests** (129 assertions across 13 test cases via Catch2):
+
+- Market assessment (spread filtering, tradeable symbols)
+- Timing helpers (market hours, weekend detection)
+- Exit conditions (TP/SL/trailing stop)
+- Entry filters (spread, volume)
+- Strategy calculations (MA, volatility, volume)
+
+### Individual Test Suites
+
+```bash
+# Core functionality tests
+./build/lft_tests
+
+# Trading logic tests
+./build/lft_trading_tests
+
+# Verbose output
+./build/lft_tests -s
+```
+
+**Philosophy**: Test business logic without external dependencies. Integration testing happens in paper trading mode.
+
 ## Trading Performance
 
 Run `./scripts/fetch_orders.sh --csv` to analyze your trading history. The CSV includes:
@@ -244,3 +370,15 @@ Run `./scripts/fetch_orders.sh --csv` to analyze your trading history. The CSV i
 - Strategy parameters (for orders placed after Jan 12, 2026)
 
 All historical data available via Alpaca API for post-trade analysis.
+
+## Project Metrics
+
+**Source Lines of Code**: 3,261 (86% C++, 14% C headers)
+
+**Development Effort** (COCOMO model):
+
+- Estimated: 8.3 person-months (~$223k at 2026 market rates)
+- Actual: ~1 month with Claude Code assistance
+- ROI: ~97% reduction in development time
+
+Generated using [SLOCCount](https://dwheeler.com/sloccount/).
