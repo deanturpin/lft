@@ -218,7 +218,7 @@ include/
   alpaca_client.h   - API client interface
   strategies.h      - Strategy interfaces and data structures
   exit_logic_tests.h - Compile-time exit logic verification
-scripts/
+bin/
   fetch_orders.sh   - Export order history to CSV for analysis
 ```
 
@@ -228,10 +228,10 @@ scripts/
 
 ```bash
 # View recent orders in terminal
-./scripts/fetch_orders.sh
+./bin/fetch_orders.sh
 
 # Export to CSV for analysis
-./scripts/fetch_orders.sh --csv my_orders.csv
+./bin/fetch_orders.sh --csv my_orders.csv
 ```
 
 Fetches last 7 days of orders (up to 500) with full details including strategy parameters encoded in `client_order_id`.
@@ -362,7 +362,7 @@ make && ctest --output-on-failure
 
 ## Trading Performance
 
-Run `./scripts/fetch_orders.sh --csv` to analyze your trading history. The CSV includes:
+Run `./bin/fetch_orders.sh --csv` to analyze your trading history. The CSV includes:
 
 - Order timestamps and symbols
 - Buy/sell side with quantities and notional amounts
