@@ -228,10 +228,10 @@ bin/
 
 ```bash
 # View recent orders in terminal
-./bin/fetch_orders.sh
+bin/fetch_orders.sh
 
 # Export to CSV for analysis
-./bin/fetch_orders.sh --csv my_orders.csv
+bin/fetch_orders.sh --csv my_orders.csv
 ```
 
 Fetches last 7 days of orders (up to 500) with full details including strategy parameters encoded in `client_order_id`.
@@ -349,20 +349,20 @@ make && ctest --output-on-failure
 
 ```bash
 # Core functionality tests
-./build/lft_tests
+build/lft_tests
 
 # Trading logic tests
-./build/lft_trading_tests
+build/lft_trading_tests
 
 # Verbose output
-./build/lft_tests -s
+build/lft_tests -s
 ```
 
 **Philosophy**: Test business logic without external dependencies. Integration testing happens in paper trading mode.
 
 ## Trading Performance
 
-Run `./bin/fetch_orders.sh --csv` to analyze your trading history. The CSV includes:
+Run `bin/fetch_orders.sh --csv` to analyze your trading history. The CSV includes:
 
 - Order timestamps and symbols
 - Buy/sell side with quantities and notional amounts
