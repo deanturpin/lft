@@ -12,6 +12,10 @@ build:
 run: build
 	@build/lft
 
+# Run tests
+test: build
+	@cd build && ctest --output-on-failure
+
 # Clean build artifacts
 clean:
 	rm -rf build
