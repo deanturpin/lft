@@ -57,9 +57,8 @@ void check_entries(AlpacaClient &client,
     const auto &bars = *bars_opt;
     const auto &snapshot = *snapshot_opt;
 
-    // Check spread filter
-    const auto spread_bps = ((snapshot.latest_quote_ask - snapshot.latest_quote_bid) /
-                             snapshot.latest_quote_bid) * 10000.0;
+    // Check spread filter (uses industry-standard mid-price calculation)
+    const auto spread_bps = Strategies::calculate_spread_bps(snapshot);
     if (spread_bps > max_spread_bps_stocks) {
       std::println("  {} - spread too wide ({:.1f} bps)", symbol, spread_bps);
       continue;
