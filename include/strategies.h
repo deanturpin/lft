@@ -7,8 +7,6 @@
 #include <string>
 #include <vector>
 
-namespace lft {
-
 // Strategy result indicating whether to buy and why
 struct StrategySignal {
     bool should_buy{false};
@@ -96,6 +94,7 @@ struct PriceHistory {
     void add_bar(double, double, double, long);
     double moving_average(size_t) const;
     double volatility() const;
+    double price_std_dev(size_t) const;  // Standard deviation of price series
     double recent_noise(size_t = 20) const;
     long avg_volume() const;
     double volume_factor() const;
@@ -126,5 +125,3 @@ public:
     static double calculate_spread_bps(const Snapshot&);
     static double calculate_volume_ratio(const PriceHistory&);
 };
-
-} // namespace lft

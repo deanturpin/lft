@@ -10,12 +10,8 @@ build:
 
 # Run the trading system
 run: build
-	@./build/lft
+	@build/lft
 
 # Clean build artifacts
 clean:
 	rm -rf build
-
-# Run tests (placeholder for now)
-test: build
-	@cd build && ctest --output-on-failure

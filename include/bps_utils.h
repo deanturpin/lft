@@ -3,8 +3,6 @@
 // Basis points (bps) utility functions
 // 1 bp = 0.01% = 0.0001
 
-namespace lft {
-
 // Constexpr tolerance helper for floating-point comparisons
 constexpr bool near(double a, double b, double eps = 1e-12) {
   return (a > b ? a - b : b - a) <= eps;
@@ -59,5 +57,3 @@ static_assert(near(bps_to_percent(1.0), 0.0001), "1 bp = 0.01%");
 static_assert(near(100_bps, 0.01), "100 bps literal = 0.01 (1%)");
 static_assert(near(50_bps, 0.005), "50 bps literal = 0.005 (0.5%)");
 static_assert(near(1_bps, 0.0001), "1 bp literal = 0.0001 (0.01%)");
-
-} // namespace lft

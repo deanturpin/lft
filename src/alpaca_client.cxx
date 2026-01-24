@@ -7,8 +7,6 @@
 
 using json = nlohmann::json;
 
-namespace lft {
-
 AlpacaClient::AlpacaClient()
     : api_key_{get_env_or_default("ALPACA_API_KEY", "")},
       api_secret_{get_env_or_default("ALPACA_API_SECRET", "")},
@@ -18,7 +16,16 @@ AlpacaClient::AlpacaClient()
           get_env_or_default("ALPACA_DATA_URL", "https://data.alpaca.markets")},
       data_api_key_{get_env_or_default("ALPACA_DATA_API_KEY", api_key_)},
       data_api_secret_{
-          get_env_or_default("ALPACA_DATA_API_SECRET", api_secret_)} {}
+          get_env_or_default("ALPACA_DATA_API_SECRET", api_secret_)} {
+  // Validate required credentials
+  if (api_key_.empty() or api_secret_.empty()) {
+    std::println("❌ ERROR: ALPACA_API_KEY and ALPACA_API_SECRET must be set");
+    std::println("Please set environment variables before running:");
+    std::println("  export ALPACA_API_KEY=\"your_key\"");
+    std::println("  export ALPACA_API_SECRET=\"your_secret\"");
+    std::exit(1);
+  }
+}
 
 std::string AlpacaClient::get_env_or_default(std::string_view name,
                                              std::string_view default_val) {
@@ -104,6 +111,18 @@ AlpacaClient::get_snapshots(const std::vector<std::string> &symbols) {
   } catch (const json::exception &) {
     return std::unexpected(AlpacaError::ParseError);
   }
+}
+
+std::optional<Snapshot> AlpacaClient::get_snapshot(std::string_view symbol) {
+  auto result = get_snapshots({std::string{symbol}});
+  if (not result)
+    return std::nullopt;
+
+  auto &snapshots = result.value();
+  if (snapshots.empty())
+    return std::nullopt;
+
+  return snapshots.begin()->second;
 }
 
 std::expected<std::map<std::string, Snapshot>, AlpacaError>
@@ -217,7 +236,7 @@ std::expected<std::string, AlpacaError> AlpacaClient::get_account() {
   return res->body;
 }
 
-std::expected<std::string, AlpacaError> AlpacaClient::get_positions() {
+std::vector<Position> AlpacaClient::get_positions() {
   auto client = httplib::Client{base_url_};
   client.set_connection_timeout(10);
   client.set_read_timeout(30);
@@ -227,19 +246,27 @@ std::expected<std::string, AlpacaError> AlpacaClient::get_positions() {
 
   auto res = client.Get("/v2/positions", headers);
 
-  if (not res)
-    return std::unexpected(AlpacaError::NetworkError);
+  if (not res or res->status != 200)
+    return {};
 
-  if (res->status == 401)
-    return std::unexpected(AlpacaError::AuthError);
+  auto positions = std::vector<Position>{};
+  auto json = nlohmann::json::parse(res->body, nullptr, false);
 
-  if (res->status != 200) {
-    std::println(stderr, "API error: status={}, body={}", res->status,
-                 res->body);
-    return std::unexpected(AlpacaError::UnknownError);
+  if (json.is_discarded() or not json.is_array())
+    return {};
+
+  for (const auto &item : json) {
+    auto pos = Position{};
+    pos.symbol = item.value("symbol", "");
+    pos.qty = std::stod(item.value("qty", "0"));
+    pos.avg_entry_price = std::stod(item.value("avg_entry_price", "0"));
+    pos.current_price = std::stod(item.value("current_price", "0"));
+    pos.unrealized_pl = std::stod(item.value("unrealized_pl", "0"));
+    pos.unrealized_plpc = std::stod(item.value("unrealized_plpc", "0"));
+    positions.push_back(pos);
   }
 
-  return res->body;
+  return positions;
 }
 
 std::expected<std::string, AlpacaError> AlpacaClient::get_open_orders() {
@@ -480,6 +507,31 @@ AlpacaClient::get_bars(std::string_view symbol, std::string_view timeframe,
   return bars;
 }
 
+std::optional<std::vector<Bar>> AlpacaClient::get_bars(std::string_view symbol,
+                                                        std::string_view timeframe,
+                                                        int days) {
+  // Calculate start and end dates
+  const auto now = std::chrono::system_clock::now();
+  const auto start = now - std::chrono::hours(24 * days);
+
+  const auto end_t = std::chrono::system_clock::to_time_t(now);
+  const auto start_t = std::chrono::system_clock::to_time_t(start);
+
+  auto end_tm = *std::gmtime(&end_t);
+  auto start_tm = *std::gmtime(&start_t);
+
+  const auto end_str = std::format("{:04}-{:02}-{:02}", end_tm.tm_year + 1900,
+                                    end_tm.tm_mon + 1, end_tm.tm_mday);
+  const auto start_str = std::format("{:04}-{:02}-{:02}", start_tm.tm_year + 1900,
+                                      start_tm.tm_mon + 1, start_tm.tm_mday);
+
+  auto result = get_bars(symbol, timeframe, start_str, end_str);
+  if (not result)
+    return std::nullopt;
+
+  return result.value();
+}
+
 std::expected<std::vector<Bar>, AlpacaError>
 AlpacaClient::get_crypto_bars(std::string_view symbol,
                               std::string_view timeframe,
@@ -536,4 +588,51 @@ AlpacaClient::get_crypto_bars(std::string_view symbol,
   return bars;
 }
 
-} // namespace lft
+std::expected<MarketClock, AlpacaError> AlpacaClient::get_market_clock() {
+  // Create HTTPS client for trading API
+  auto client = httplib::Client{base_url_};
+  client.set_connection_timeout(10);
+  client.set_read_timeout(30);
+
+  // Build request path
+  const auto path = std::string{"/v2/clock"};
+
+  // Set headers
+  httplib::Headers headers = {{"APCA-API-KEY-ID", api_key_},
+                              {"APCA-API-SECRET-KEY", api_secret_}};
+
+  auto res = client.Get(path, headers);
+
+  if (not res) {
+    std::println(stderr, "  Network error - no response from clock API");
+    return std::unexpected(AlpacaError::NetworkError);
+  }
+
+  if (res->status == 401)
+    return std::unexpected(AlpacaError::AuthError);
+
+  if (res->status == 429)
+    return std::unexpected(AlpacaError::RateLimitError);
+
+  if (res->status != 200) {
+    std::println(stderr, "Clock API error: status={}, body={}", res->status,
+                 res->body);
+    return std::unexpected(AlpacaError::UnknownError);
+  }
+
+  try {
+    auto j = json::parse(res->body);
+
+    auto clock = MarketClock{};
+    clock.timestamp = j["timestamp"].get<std::string>();
+    clock.is_open = j["is_open"].get<bool>();
+    clock.next_open = j["next_open"].get<std::string>();
+    clock.next_close = j["next_close"].get<std::string>();
+
+    return clock;
+
+  } catch (const json::exception &e) {
+    std::println(stderr, "JSON parse error in clock API: {}", e.what());
+    return std::unexpected(AlpacaError::ParseError);
+  }
+}

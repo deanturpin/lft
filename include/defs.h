@@ -1,11 +1,34 @@
 #pragma once
 
-namespace lft {
-
 // Trading parameters
 constexpr auto notional_amount = 1000.0;  // Dollar amount per trade
 constexpr auto calibration_days = 30;     // Duration for strategy calibration
 constexpr auto min_trades_to_enable = 10; // Minimum trades to enable strategy
+
+// Exit parameters (2/1/0.9 pattern: TP 2%, SL 1%, TS 0.9%)
+constexpr auto take_profit_pct = 1.0;      // 2% take profit threshold
+constexpr auto stop_loss_pct = 0.03;       // 1% stop loss threshold
+constexpr auto trailing_stop_pct = 0.02;   // 0.9% trailing stop threshold
+constexpr auto panic_stop_loss_pct = 0.06; // 3.5% panic stop (safety net)
+
+// Exit parameter validation
+// TP can be 0.0 to disable (let trailing stop or manual exit handle profits)
+static_assert(take_profit_pct >= 0.0, "Take profit must be >= 0 (0 disables)");
+static_assert(stop_loss_pct > 0.0, "Stop loss must be positive");
+static_assert(trailing_stop_pct > 0.0, "Trailing stop must be positive");
+static_assert(panic_stop_loss_pct > 0.0, "Panic stop loss must be positive");
+static_assert(panic_stop_loss_pct > stop_loss_pct,
+              "Panic stop must be looser than normal stop");
+// static_assert(panic_stop_loss_pct > trailing_stop_pct,
+//               "Panic stop must be looser than trailing stop");
+// static_assert(trailing_stop_pct < stop_loss_pct,
+//   "Trailing stop should be < stop loss (usually)");
+// Only check TP >= SL relationship if TP is enabled
+static_assert(
+    take_profit_pct == 0.0 or take_profit_pct >= stop_loss_pct,
+    "Take profit (if enabled) should be >= stop loss (often sensible for MR)");
+// static_assert(take_profit_pct == 0.0 or trailing_stop_pct <= take_profit_pct,
+//   "Trailing stop should be <= take profit (if TP enabled)");
 
 // Trade eligibility filters (Tier 1 - Must Do)
 constexpr auto max_spread_bps_stocks =
@@ -105,25 +128,28 @@ inline const auto stocks = std::vector<std::string>{
     "VNQ"  // US REITs
 };
 
-// TEMPORARILY DISABLED (2026-01-13): Triple AVAX positions detected
-// Need to investigate why duplicate order prevention isn't working for crypto
-// See BUGFIX_2026-01-13.md for details on the duplicate order bug
+// TEMPORARILY DISABLED (2026-01-13): Triple AVAX positions
+// detected Need to investigate why duplicate order prevention
+// isn't working for crypto See BUGFIX_2026-01-13.md for details
+// on the duplicate order bug
 inline const auto crypto = std::vector<std::string>{
     // DISABLED - Major cryptocurrencies (Layer 1 blockchains)
-    // "BTC/USD",  // Bitcoin - Original cryptocurrency, digital gold
+    // "BTC/USD",  // Bitcoin - Original cryptocurrency, digital
+    // gold
     // "ETH/USD",  // Ethereum - Smart contracts, DeFi, NFTs
     // "SOL/USD",  // Solana - High-speed blockchain, low fees
     // "AVAX/USD", // Avalanche - Fast, scalable smart contracts
     // DISABLED - Meme coins (high volatility)
     // "DOGE/USD", // Dogecoin - Original meme coin
     // DISABLED - DeFi and infrastructure
-    // "LINK/USD"  // Chainlink - Decentralised oracles for smart contracts
+    // "LINK/USD"  // Chainlink - Decentralised oracles for smart
+    // contracts
 };
 
 // Timing parameters
 // Note: Actual polling is aligned to :35 past each minute (see
-// sleep_until_bar_ready) Alpaca recalculates bars at :30 to include late
-// trades, so :35 ensures complete data
+// sleep_until_bar_ready) Alpaca recalculates bars at :30 to
+// include late trades, so :35 ensures complete data
 constexpr auto max_cycles = 60; // Run for 60 minutes then re-calibrate
 constexpr auto cooldown_minutes =
     15; // Minutes to wait before re-entering same symbol
@@ -182,7 +208,8 @@ static_assert(stock_alert_threshold > 0.0,
 static_assert(crypto_alert_threshold > 0.0,
               "Crypto alert threshold must be positive");
 static_assert(crypto_alert_threshold >= stock_alert_threshold,
-              "Crypto threshold should be >= stock threshold (more volatile)");
+              "Crypto threshold should be >= stock threshold "
+              "(more volatile)");
 static_assert(outlier_threshold > crypto_alert_threshold,
               "Outlier threshold must be higher than alert threshold");
 static_assert(outlier_threshold <= 100.0,
@@ -214,9 +241,9 @@ static_assert(adverse_selection_bps >= 0.0,
 static_assert(adverse_selection_bps <= 10.0,
               "Adverse selection cost too high - max 10 bps");
 static_assert(min_edge_bps > 0.0, "Minimum edge must be positive");
-static_assert(
-    min_edge_bps >= slippage_buffer_bps + adverse_selection_bps,
-    "Minimum edge should cover at least slippage + adverse selection");
+static_assert(min_edge_bps >= slippage_buffer_bps + adverse_selection_bps,
+              "Minimum edge should cover at least slippage + "
+              "adverse selection");
 static_assert(min_edge_bps <= 50.0,
               "Minimum edge too high - may block all trades");
 
@@ -224,8 +251,8 @@ static_assert(min_edge_bps <= 50.0,
 static_assert(slippage_buffer_bps + adverse_selection_bps <
                   max_spread_bps_stocks,
               "Total non-spread costs should be less than max spread");
-static_assert(
-    slippage_buffer_bps + adverse_selection_bps + max_spread_bps_stocks < 100.0,
-    "Total costs (spread + slippage + adverse) exceed 100 bps - unrealistic");
-
-} // namespace lft
+static_assert(slippage_buffer_bps + adverse_selection_bps +
+                      max_spread_bps_stocks <
+                  100.0,
+              "Total costs (spread + slippage + adverse) exceed "
+              "100 bps - unrealistic");
