@@ -108,14 +108,6 @@ add_executable(lft_trading_tests
 )
 target_link_libraries(lft_trading_tests PRIVATE alpaca_client Catch2::Catch2WithMain)
 
-# Clock API test (manual test executable)
-add_executable(test_clock test_clock.cxx)
-target_link_libraries(test_clock PRIVATE alpaca_client)
-
-# Account and market status test
-add_executable(test_account test_account.cxx)
-target_link_libraries(test_account PRIVATE alpaca_client)
-
 # Enable CTest
 enable_testing()
 add_test(NAME lft_tests COMMAND lft_tests)
