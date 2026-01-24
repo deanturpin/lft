@@ -3,6 +3,7 @@
 #include "alpaca_client.h"
 #include "bps_utils.h"
 #include <cmath>
+#include <deque>
 #include <map>
 #include <string>
 #include <vector>
@@ -79,10 +80,10 @@ struct StrategyStats {
 
 // Price history with multiple timeframes
 struct PriceHistory {
-    std::vector<double> prices;
-    std::vector<double> highs;     // High prices for noise calculation
-    std::vector<double> lows;      // Low prices for noise calculation
-    std::vector<long> volumes;     // Trading volumes
+    std::deque<double> prices;
+    std::deque<double> highs;     // High prices for noise calculation
+    std::deque<double> lows;      // Low prices for noise calculation
+    std::deque<long> volumes;     // Trading volumes
     double last_price{};
     double change_percent{};
     bool has_history{false};

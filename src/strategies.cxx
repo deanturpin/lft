@@ -13,7 +13,7 @@ void PriceHistory::add_price_with_timestamp(double price, std::string_view times
 
         // Keep last 100 data points for moving averages
         if (prices.size() > 100)
-            prices.erase(prices.begin());
+            prices.pop_front();
 
         if (prices.size() >= 2) {
             last_price = prices[prices.size() - 2];
@@ -28,7 +28,7 @@ void PriceHistory::add_price(double price) {
     prices.push_back(price);
     // Keep last 100 data points for moving averages
     if (prices.size() > 100)
-        prices.erase(prices.begin());
+        prices.pop_front();
 
     if (prices.size() >= 2) {
         last_price = prices[prices.size() - 2];
@@ -45,11 +45,11 @@ void PriceHistory::add_bar(double close, double high, double low, long volume) {
 
     // Keep synced with prices
     if (highs.size() > 100)
-        highs.erase(highs.begin());
+        highs.pop_front();
     if (lows.size() > 100)
-        lows.erase(lows.begin());
+        lows.pop_front();
     if (volumes.size() > 100)
-        volumes.erase(volumes.begin());
+        volumes.pop_front();
 }
 
 double PriceHistory::moving_average(size_t periods) const {
