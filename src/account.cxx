@@ -4,7 +4,6 @@
 #include "lft.h"
 #include "defs.h"
 #include <algorithm>
-#include <chrono>
 #include <format>
 #include <nlohmann/json.hpp>
 #include <print>
@@ -12,16 +11,10 @@
 #include <vector>
 
 void display_account_summary(AlpacaClient &client) {
-  using namespace std::chrono;
-  const auto summary_start = steady_clock::now();
-
   std::println("\n💼 Account Summary:");
 
   // Get and display account balances
-  const auto account_start = steady_clock::now();
   if (auto account_result = client.get_account()) {
-    const auto account_duration = duration_cast<milliseconds>(steady_clock::now() - account_start);
-    std::println("  [DEBUG] Account fetch: {}ms", account_duration.count());
     auto account_json = nlohmann::json::parse(*account_result);
 
     const auto equity = account_json.contains("equity") and not account_json["equity"].is_null()
@@ -47,16 +40,11 @@ void display_account_summary(AlpacaClient &client) {
     std::println("  Day Trade BP:    ${:>12.2f}", daytrading_buying_power);
     std::println("  Day Trades:      {} of 3 used", daytrade_count);
   } else {
-    const auto account_duration = duration_cast<milliseconds>(steady_clock::now() - account_start);
-    std::println("  [DEBUG] Account fetch FAILED: {}ms", account_duration.count());
     std::println("  ⚠️  Could not fetch account information");
   }
 
   // Get current positions
-  const auto positions_start = steady_clock::now();
   auto positions = client.get_positions();
-  const auto positions_duration = duration_cast<milliseconds>(steady_clock::now() - positions_start);
-  std::println("  [DEBUG] Positions fetch: {}ms", positions_duration.count());
   if (not positions.empty()) {
     std::println("\n📈 Current Positions:");
     auto total_pl = 0.0;
@@ -87,8 +75,4 @@ void display_account_summary(AlpacaClient &client) {
       }
     }
   }
-
-  // Summary timing
-  const auto total_duration = duration_cast<milliseconds>(steady_clock::now() - summary_start);
-  std::println("  [DEBUG] Account summary time: {}ms", total_duration.count());
 }
