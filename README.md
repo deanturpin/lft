@@ -320,43 +320,13 @@ See [GitHub Issues](https://github.com/deanturpin/lft/issues) for active develop
 
 ## Testing
 
-The system includes comprehensive compile-time and runtime tests.
-
-### Run All Tests
-
-```bash
-# Build and run all tests
-make && ctest --output-on-failure
-```
-
-### Test Coverage
-
 **Compile-Time Tests** (~160 assertions via `static_assert`):
 
 - Parameter validation ([include/defs.h](include/defs.h))
 - Exit logic calculations ([include/exit_criteria.h](include/exit_criteria.h))
 - Helper function correctness
 
-**Runtime Tests** (129 assertions across 13 test cases via Catch2):
-
-- Market assessment (spread filtering, tradeable symbols)
-- Timing helpers (market hours, weekend detection)
-- Exit conditions (TP/SL/trailing stop)
-- Entry filters (spread, volume)
-- Strategy calculations (MA, volatility, volume)
-
-### Individual Test Suites
-
-```bash
-# Core functionality tests
-build/lft_tests
-
-# Trading logic tests
-build/lft_trading_tests
-
-# Verbose output
-build/lft_tests -s
-```
+**Runtime Tests**: Currently being redesigned (see [#72](https://github.com/deanturpin/lft/issues/72))
 
 **Philosophy**: Test business logic without external dependencies. Integration testing happens in paper trading mode.
 

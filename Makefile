@@ -1,4 +1,4 @@
-.PHONY: all build run clean test
+.PHONY: all build run clean
 
 # Default target: build and run
 all: build run
@@ -11,10 +11,6 @@ build:
 # Run the trading system
 run: build
 	@build/lft
-
-# Run tests
-test: build
-	@cd build && ctest --output-on-failure
 
 # Clean build artifacts
 clean:
