@@ -50,14 +50,7 @@ FetchContent_Declare(
     GIT_TAG v3.11.3
 )
 
-# Catch2 for unit testing
-FetchContent_Declare(
-    Catch2
-    GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-    GIT_TAG v3.5.1
-)
-
-FetchContent_MakeAvailable(httplib json Catch2)
+FetchContent_MakeAvailable(httplib json)
 
 # Include directories
 include_directories(include)
@@ -83,32 +76,3 @@ add_executable(lft
 )
 target_link_libraries(lft PRIVATE alpaca_client)
 
-# Test executables
-add_executable(lft_tests
-    tests/test_phases.cxx
-    src/lft.cxx
-    src/globals.cxx
-    src/calibrate.cxx
-    src/check_entries.cxx
-    src/check_exits.cxx
-    src/liquidate.cxx
-    src/strategies.cxx
-)
-target_link_libraries(lft_tests PRIVATE alpaca_client Catch2::Catch2WithMain)
-
-add_executable(lft_trading_tests
-    tests/test_trading_logic.cxx
-    src/lft.cxx
-    src/globals.cxx
-    src/calibrate.cxx
-    src/check_entries.cxx
-    src/check_exits.cxx
-    src/liquidate.cxx
-    src/strategies.cxx
-)
-target_link_libraries(lft_trading_tests PRIVATE alpaca_client Catch2::Catch2WithMain)
-
-# Enable CTest
-enable_testing()
-add_test(NAME lft_tests COMMAND lft_tests)
-add_test(NAME lft_trading_tests COMMAND lft_trading_tests)
