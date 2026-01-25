@@ -3,6 +3,10 @@
 #include <cmath>
 #include <format>
 
+namespace {
+    constexpr auto max_history_size = 100uz;
+}
+
 // PriceHistory implementation
 
 void PriceHistory::add_price_with_timestamp(double price, std::string_view timestamp) {
@@ -11,12 +15,12 @@ void PriceHistory::add_price_with_timestamp(double price, std::string_view times
         prices.push_back(price);
         last_trade_timestamp = std::string{timestamp};
 
-        // Keep last 100 data points for moving averages
-        if (prices.size() > 100)
+        // Keep last max_history_size data points for moving averages
+        if (prices.size() > max_history_size)
             prices.pop_front();
 
-        if (prices.size() >= 2) {
-            last_price = prices[prices.size() - 2];
+        if (prices.size() >= 2uz) {
+            last_price = prices[prices.size() - 2uz];
             change_percent = ((price - last_price) / last_price) * 100.0;
             has_history = true;
         }
@@ -26,12 +30,12 @@ void PriceHistory::add_price_with_timestamp(double price, std::string_view times
 
 void PriceHistory::add_price(double price) {
     prices.push_back(price);
-    // Keep last 100 data points for moving averages
-    if (prices.size() > 100)
+    // Keep last max_history_size data points for moving averages
+    if (prices.size() > max_history_size)
         prices.pop_front();
 
-    if (prices.size() >= 2) {
-        last_price = prices[prices.size() - 2];
+    if (prices.size() >= 2uz) {
+        last_price = prices[prices.size() - 2uz];
         change_percent = ((price - last_price) / last_price) * 100.0;
         has_history = true;
     }
@@ -44,11 +48,11 @@ void PriceHistory::add_bar(double close, double high, double low, long volume) {
     volumes.push_back(volume);
 
     // Keep synced with prices
-    if (highs.size() > 100)
+    if (highs.size() > max_history_size)
         highs.pop_front();
-    if (lows.size() > 100)
+    if (lows.size() > max_history_size)
         lows.pop_front();
-    if (volumes.size() > 100)
+    if (volumes.size() > max_history_size)
         volumes.pop_front();
 }
 
@@ -64,15 +68,15 @@ double PriceHistory::moving_average(size_t periods) const {
 }
 
 double PriceHistory::volatility() const {
-    if (prices.size() < 2)
+    if (prices.size() < 2uz)
         return 0.0;
 
     // Calculate returns (percentage changes between consecutive prices)
     auto returns = std::vector<double>{};
-    returns.reserve(prices.size() - 1);
+    returns.reserve(prices.size() - 1uz);
 
     for (auto i = 1uz; i < prices.size(); ++i) {
-        auto ret = (prices[i] - prices[i-1]) / prices[i-1];
+        auto ret = (prices[i] - prices[i-1uz]) / prices[i-1uz];
         returns.push_back(ret);
     }
 
@@ -189,7 +193,7 @@ StrategySignal Strategies::evaluate_ma_crossover(const PriceHistory& history) {
     signal.strategy_name = "ma_crossover";
 
     // Need at least 20 data points for short MA
-    if (history.prices.size() < 20)
+    if (history.prices.size() < 20uz)
         return signal;
 
     auto ma_short = history.moving_average(5);   // 5-period MA
@@ -200,7 +204,7 @@ StrategySignal Strategies::evaluate_ma_crossover(const PriceHistory& history) {
     assert(std::isfinite(ma_long) && ma_long > 0.0 && "Long MA must be positive and finite");
 
     // Previous values to detect crossover
-    if (history.prices.size() < 21)
+    if (history.prices.size() < 21uz)
         return signal;
 
     auto prev_prices = history.prices;
@@ -209,13 +213,13 @@ StrategySignal Strategies::evaluate_ma_crossover(const PriceHistory& history) {
     auto prev_ma_short = 0.0;
     auto prev_ma_long = 0.0;
 
-    for (auto i = prev_prices.size() - 5; i < prev_prices.size(); ++i)
+    for (auto i = prev_prices.size() - 5uz; i < prev_prices.size(); ++i)
         prev_ma_short += prev_prices[i];
-    prev_ma_short /= 5;
+    prev_ma_short /= 5.0;
 
-    for (auto i = prev_prices.size() - 20; i < prev_prices.size(); ++i)
+    for (auto i = prev_prices.size() - 20uz; i < prev_prices.size(); ++i)
         prev_ma_long += prev_prices[i];
-    prev_ma_long /= 20;
+    prev_ma_long /= 20.0;
 
     // Bullish crossover: short MA crosses above long MA
     if (prev_ma_short <= prev_ma_long and ma_short > ma_long) {
@@ -230,7 +234,7 @@ StrategySignal Strategies::evaluate_mean_reversion(const PriceHistory& history) 
     auto signal = StrategySignal{};
     signal.strategy_name = "mean_reversion";
 
-    if (history.prices.size() < 20)
+    if (history.prices.size() < 20uz)
         return signal;
 
     auto current_price = history.prices.back();
@@ -261,17 +265,17 @@ StrategySignal Strategies::evaluate_volatility_breakout(const PriceHistory& hist
     auto signal = StrategySignal{};
     signal.strategy_name = "volatility_breakout";
 
-    if (history.prices.size() < 20)
+    if (history.prices.size() < 20uz)
         return signal;
 
     // Calculate recent volatility vs historical
     auto recent_volatility = 0.0;
-    for (auto i = history.prices.size() - 5; i < history.prices.size() - 1; ++i) {
+    for (auto i = history.prices.size() - 5uz; i < history.prices.size() - 1uz; ++i) {
         auto change = std::abs((history.prices[i + 1] - history.prices[i]) / history.prices[i]);
         assert(std::isfinite(change) && "Price change must be finite");
         recent_volatility += change;
     }
-    recent_volatility /= 4;
+    recent_volatility /= 4.0;
 
     auto historical_volatility = history.volatility();
 
@@ -314,7 +318,7 @@ StrategySignal Strategies::evaluate_relative_strength(
         }
     }
 
-    if (count == 0)
+    if (count == 0uz)
         return signal;
 
     auto market_average = total_change / count;
@@ -335,7 +339,7 @@ StrategySignal Strategies::evaluate_volume_surge(const PriceHistory& history) {
     signal.strategy_name = "volume_surge";
 
     // Need volume history and price movement
-    if (history.volumes.size() < 20 or history.prices.size() < 2)
+    if (history.volumes.size() < 20uz or history.prices.size() < 2uz)
         return signal;
 
     auto current_vol = history.volumes.back();

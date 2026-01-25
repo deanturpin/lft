@@ -21,7 +21,7 @@ struct StrategySignal {
 struct StrategyConfig {
     std::string name;
     bool enabled{false};
-    int trades_closed{};        // From calibration
+    uint32_t trades_closed{};   // From calibration
     double net_profit{};        // From calibration
     double win_rate{};          // From calibration
     double expected_move_bps{}; // Average forward return after signal (from calibration)
@@ -30,11 +30,11 @@ struct StrategyConfig {
 // Performance tracking for each strategy
 struct StrategyStats {
     std::string name;
-    int signals_generated{};
-    int trades_executed{};
-    int trades_closed{};
-    int profitable_trades{};
-    int losing_trades{};
+    uint32_t signals_generated{};
+    uint32_t trades_executed{};
+    uint32_t trades_closed{};
+    uint32_t profitable_trades{};
+    uint32_t losing_trades{};
     double total_profit{};
     double total_loss{};
 
