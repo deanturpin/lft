@@ -343,12 +343,12 @@ All historical data available via Alpaca API for post-trade analysis.
 
 ## Project Metrics
 
-**Source Lines of Code**: 3,261 (86% C++, 14% C headers)
+**Source Lines of Code**: 2,528 (71% C++, 19% C headers, 6% shell, 4% Python)
 
 **Development Effort** (COCOMO model):
 
-- Estimated: 8.3 person-months (~$223k at 2026 market rates)
+- Estimated: 6.4 person-months (~$72k at 2026 market rates)
 - Actual: ~1 month with Claude Code assistance
-- ROI: ~97% reduction in development time
+- ROI: ~84% reduction in development time
 
 Generated using [SLOCCount](https://dwheeler.com/sloccount/).
