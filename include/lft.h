@@ -80,5 +80,5 @@ std::chrono::system_clock::time_point next_whole_hour(std::chrono::system_clock:
 std::chrono::system_clock::time_point next_15_minute_bar(std::chrono::system_clock::time_point);
 std::chrono::system_clock::time_point next_minute_at_35_seconds(std::chrono::system_clock::time_point);
 std::chrono::system_clock::time_point eod_cutoff_time(std::chrono::system_clock::time_point);
-std::chrono::system_clock::time_point trading_window_open(std::chrono::system_clock::time_point);
+std::chrono::system_clock::time_point risk_on_time(std::chrono::system_clock::time_point);
 bool is_market_hours(std::chrono::system_clock::time_point);
