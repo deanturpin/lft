@@ -121,7 +121,7 @@ int main() {
   const auto session_start = std::chrono::system_clock::now();
   const auto session_end = next_whole_hour(session_start);
   const auto eod = eod_cutoff_time(session_start); // 3:50 PM ET today
-  const auto risk_on = risk_on_time(session_start); // 10:00 AM ET today
+  const auto risk_off_ends = risk_on_time(session_start); // 10:00 AM ET today
 
   // Fetch 30 days of 15-minute bars for calibration
   std::println("📊 Fetching historical data...");
@@ -202,14 +202,14 @@ int main() {
     // Risk-off before 10:00 AM ET (opening volatility period)
     // Also check normal exits (TP/SL/trailing) at same frequency as entries
     if (now >= next_entry) {
-      const auto risk_off = now < risk_on;
+      const auto risk_off = now < risk_off_ends;
       if (not risk_off) {
         std::println("\n💼 Executing entry trades at {:%H:%M:%S}",
                      std::chrono::floor<std::chrono::seconds>(now));
         check_entries(client, enabled_strategies);
       } else {
         std::println("\n⚠️  Risk-off: No entries until {:%H:%M:%S}",
-                     std::chrono::floor<std::chrono::seconds>(risk_on));
+                     std::chrono::floor<std::chrono::seconds>(risk_off_ends));
       }
       check_normal_exits(client, now);
       next_entry = next_15_minute_bar(now);
