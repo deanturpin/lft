@@ -121,6 +121,7 @@ int main() {
   const auto session_start = std::chrono::system_clock::now();
   const auto session_end = next_whole_hour(session_start);
   const auto eod = eod_cutoff_time(session_start); // 3:50 PM ET today
+  const auto trading_open = trading_window_open(session_start); // 10:00 AM ET today
 
   // Fetch 30 days of 15-minute bars for calibration
   std::println("📊 Fetching historical data...");
@@ -198,11 +199,18 @@ int main() {
     }
 
     // Execute entry trades every 15 minutes (aligned to :00, :15, :30, :45)
+    // Only allow entries between 10:00 AM and 3:30 PM ET (avoid opening volatility)
     // Also check normal exits (TP/SL/trailing) at same frequency as entries
     if (now >= next_entry) {
-      std::println("\n💼 Executing entry trades at {:%H:%M:%S}",
-                   std::chrono::floor<std::chrono::seconds>(now));
-      check_entries(client, enabled_strategies);
+      // Check if we're in the allowed trading window (after 10:00 AM ET)
+      if (now >= trading_open) {
+        std::println("\n💼 Executing entry trades at {:%H:%M:%S}",
+                     std::chrono::floor<std::chrono::seconds>(now));
+        check_entries(client, enabled_strategies);
+      } else {
+        std::println("\n⏸️  Before trading window (opens at {:%H:%M:%S})",
+                     std::chrono::floor<std::chrono::seconds>(trading_open));
+      }
       check_normal_exits(client, now);
       next_entry = next_15_minute_bar(now);
     }

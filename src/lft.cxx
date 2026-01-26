@@ -241,6 +241,22 @@ eod_cutoff_time(std::chrono::system_clock::time_point now) {
   return zoned_time{"America/New_York", eod_time_et}.get_sys_time();
 }
 
+std::chrono::system_clock::time_point
+trading_window_open(std::chrono::system_clock::time_point now) {
+  using namespace std::chrono;
+
+  // Convert current time to Eastern Time
+  const auto et_now = zoned_time{"America/New_York", now};
+
+  // Get the date in ET and construct 10:00 AM ET (30 min after 9:30 open)
+  const auto et_local = et_now.get_local_time();
+  const auto et_date = floor<days>(et_local);
+  const auto open_time_et = et_date + 10h; // 10:00 AM ET
+
+  // Convert back to system_clock::time_point (UTC)
+  return zoned_time{"America/New_York", open_time_et}.get_sys_time();
+}
+
 // Check market hours (calculate manually, don't trust Alpaca's is_open field)
 bool is_market_hours(std::chrono::system_clock::time_point now) {
   using namespace std::chrono;

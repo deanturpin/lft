@@ -125,7 +125,14 @@ inline const auto stocks = std::vector<std::string>{
     // =========================
     "IEF", // 7–10Y Treasuries
     "TLT", // 20+Y Treasuries
-    "VNQ"  // US REITs
+    "VNQ", // US REITs
+
+    // =========================
+    // Momentum / Breakout Plays (Paper Trading Test)
+    // =========================
+    "BABA", // Alibaba - Multi-month downtrend break, chipmaking IPO catalyst
+    "LMND", // Lemonade - Multi-year breakout above $88, insurance tech
+    "CRML"  // Critical Minerals - Lithium mining, breaking downtrend
 };
 
 // TEMPORARILY DISABLED (2026-01-13): Triple AVAX positions
