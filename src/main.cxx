@@ -5,109 +5,6 @@
 #include <set>
 #include <thread>
 
-// RISK OFF INVARIANT
-// risk_off is a latch:
-// - starts false at session open
-// - any predicate may set it true
-// - once true, it remains true until next session reset/*
-
-/*
-// risk_off / riskOff (very common)
-
-// panic_exit / panicExit (clear and blunt)
-
-// kill_switch / killSwitch (common in trading systems)
-
-// force_flat / forceFlat (describes exactly what happens)
-
-// hard_exit / hardExit (contrasts with normal exits)
-
-
-// Normal exits
-
-// Usually called:
-
-// strategy_exit / strategyExit
-
-// managed_exit / managedExit
-
-// soft_exit / softExit (only if you contrast with hard exits)
-
-// or simply exits with reasons TP, SL, TSL
-
-// I’d go with strategy_exit for clarity.
-
-
-enum class ExitReason {
-  TakeProfit,
-  StopLoss,
-  TrailingStop,
-  EodForceFlat,
-  KillSwitch,        // e.g. big loss / crash rule
-};
-
-tp = 3 sl = 2 tsl = 1 kill switch sl = 3.5
-
-    TP = +3 %
-
-         SL = −2 %
-
-              TSL =
-             1 % (probably with delayed activation, but leaving that aside)
-
-                     EOD = 16 : 00 ET
-
-                 last entry = EOD − 30m
-
-    force flat = EOD − 3m
-
-    kill switch stop = (bigger than −2 %, e.g. −3.5 %);
-if you
-  keep it at −2 % it’s not a kill switch,
-      it’s just SL
-
-          eod = 4pm no_more_trades = eod - 30 liquidate =
-                                         eod - 3
-
-                                         // entries (15 bar)
-                                         if (now < no_more_trades) {
-    // evaluate
-  }
-
-// normal exits (15 bar)
-if (tp / sl / tsl)
-
-  // emergency exits (1 bar)
-  if (now > liquidate or circuit break sl)
-
-    tp = 3;
-sl = 2;
-tsl = 1;
-
-eod = 16 : 00;
-last_entry_time = eod - 30min;
-force_flat_time = eod - 3min;
-
-// entries
-if (now < last_entry_time) {
-  // evaluate entries on 15m bar
-}
-
-// strategy exits (managed exits)
-if (tp_hit)
-  exit(ExitReason::TakeProfit);
-if (sl_hit)
-  exit(ExitReason::StopLoss);
-if (tsl_hit)
-  exit(ExitReason::TrailingStop);
-
-// hard exits (risk-off / force-flat)
-if (now >= force_flat_time)
-  exit_all(ExitReason::EodForceFlat);
-if (kill_switch_hit)
-  exit(ExitReason::KillSwitch);
-*/
-
 // LFT - Low Frequency Trader
 
 int main() {
@@ -120,8 +17,9 @@ int main() {
   // Define session duration
   const auto session_start = std::chrono::system_clock::now();
   const auto session_end = next_whole_hour(session_start);
-  const auto eod = eod_cutoff_time(session_start);          // 3:50 PM ET today
-  const auto trading_start = session_start_time(session_start); // 10:00 AM ET today
+  const auto eod = eod_cutoff_time(session_start); // 3:50 PM ET today
+  const auto trading_start =
+      session_start_time(session_start); // 10:00 AM ET today
 
   // Fetch 30 days of 15-minute bars for calibration
   std::println("📊 Fetching historical data...");
@@ -133,9 +31,6 @@ int main() {
                backtest_capital);
   const auto enabled_strategies = calibrate(bars, backtest_capital);
 
-  //   std::println("🔄 Starting event loop until {:%H:%M:%S}\n", session_end);
-
-  // Run 60 minute cycle, synchronised to whole hour
   // Create intervals
   auto next_entry = next_15_minute_bar(session_start);
   auto next_exit = next_minute_at_35_seconds(session_start);
@@ -156,8 +51,9 @@ int main() {
     std::println("\n⏰ Next Events:");
     std::println("  Strategy Cycle:  {:%H:%M:%S}  (entries + TP/SL/trailing)",
                  std::chrono::floor<std::chrono::seconds>(next_entry));
-    std::println("  Panic Check:     {:%H:%M:%S}  (panic stops + EOD liquidation)",
-                 std::chrono::floor<std::chrono::seconds>(next_exit));
+    std::println(
+        "  Panic Check:     {:%H:%M:%S}  (panic stops + EOD liquidation)",
+        std::chrono::floor<std::chrono::seconds>(next_exit));
 
     // Display balances and positions
     display_account_summary(client);
@@ -192,7 +88,8 @@ int main() {
         evaluate_market(client, enabled_strategies, symbols_in_use);
     display_evaluation(evaluation, enabled_strategies, now);
 
-    // Check panic exits every minute at :35 (fast reaction to all emergency conditions)
+    // Check panic exits every minute at :35 (fast reaction to all emergency
+    // conditions)
     if (now >= next_exit) {
       check_panic_exits(client, now, eod);
       next_exit = next_minute_at_35_seconds(now);
@@ -214,10 +111,6 @@ int main() {
       check_normal_exits(client, now);
       next_entry = next_15_minute_bar(now);
     }
-    // }
-
-    // Sleep for 1 minute before next cycle
-    // std::this_thread::sleep_for(1min);
   }
 
   std::println("\n✅ Session complete - exiting for restart");
