@@ -71,6 +71,12 @@ MarketEvaluation evaluate_market(AlpacaClient &client,
 
     eval.price = snapshot.latest_trade_price;
 
+    // Calculate daily change percentage for market breadth
+    if (snapshot.prev_daily_bar_close > 0.0) {
+      eval.daily_change_pct = ((snapshot.latest_trade_price - snapshot.prev_daily_bar_close) /
+                                snapshot.prev_daily_bar_close) * 100.0;
+    }
+
     // Calculate spread
     if (snapshot.latest_quote_bid > 0.0 and snapshot.latest_quote_ask > 0.0) {
       eval.spread_bps = ((snapshot.latest_quote_ask - snapshot.latest_quote_bid) /
@@ -180,11 +186,17 @@ MarketEvaluation evaluate_market(AlpacaClient &client,
 void display_evaluation(const MarketEvaluation &eval,
                        const std::map<std::string, bool> &enabled_strategies,
                        std::chrono::system_clock::time_point now) {
+  // Calculate market breadth
+  const auto advancing = std::ranges::count_if(eval.symbols, [](const auto &s) {
+    return s.daily_change_pct > 0.0;
+  });
+
   std::println("\n📥 Checking entries at {:%H:%M:%S}",
                std::chrono::floor<std::chrono::seconds>(now));
   std::println("  Tradeable symbols: {}/{}", eval.tradeable_count, eval.symbols.size());
   std::println("  Average spread:    {:.1f} bps", eval.avg_spread_bps);
   std::println("  Active signals:    {}", eval.total_signals);
+  std::println("  Market breadth:    {}/{} advancing", advancing, eval.symbols.size());
 
   // Build strategy name list for header
   auto strategy_names = std::vector<std::string>{};

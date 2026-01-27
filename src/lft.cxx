@@ -135,11 +135,19 @@ assess_market_conditions(AlpacaClient &client,
         return s.spread_bps <= max_spread_bps_stocks;
       });
 
+  // Calculate market breadth (advancing vs declining)
+  const auto advancing = std::ranges::count_if(symbols, [](const auto &s) {
+    return s.daily_change_pct > 0.0;
+  });
+  const auto declining = std::ranges::count_if(symbols, [](const auto &s) {
+    return s.daily_change_pct < 0.0;
+  });
+
   // Build summary with table
   const auto emoji = tradeable_count > 0 ? "✅" : "❌";
   auto summary =
-      std::format("{} {} of {} symbols tradeable (avg spread: {:.1f} bps)\n",
-                  emoji, tradeable_count, count, avg_spread_bps);
+      std::format("{} {} of {} symbols tradeable (avg spread: {:.1f} bps) | Breadth: {}/{} advancing\n",
+                  emoji, tradeable_count, count, avg_spread_bps, advancing, count);
 
   // Show table header
   summary += "\n  Symbol   Price    Change  Trend  Spread  Status\n";
