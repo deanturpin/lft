@@ -60,7 +60,16 @@ int main() {
 
     // Check market hours
     const auto is_closed = not is_market_hours(now);
-    std::println("\n📊 Market: {}", is_closed ? "CLOSED" : "OPEN");
+    const auto risk_off = now < trading_start;
+
+    if (is_closed) {
+      std::println("\n📊 Market: CLOSED");
+    } else if (risk_off) {
+      std::println("\n📊 Market: OPEN (Risk-off until {:%H:%M:%S} ET)",
+                   std::chrono::floor<std::chrono::seconds>(trading_start));
+    } else {
+      std::println("\n📊 Market: OPEN (Trading active)");
+    }
 
     if (is_closed or liquidated) {
       std::this_thread::sleep_for(1min);
