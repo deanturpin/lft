@@ -865,3 +865,412 @@ After:
 - System architecture improvements (EOD in panic cycle) working correctly
 - Need to verify if trades were actually profitable vs just opened
 - Late entry (20:49 ET) suggests need for entry cutoff time
+
+---
+
+## 2026-01-28 (Tuesday)
+
+### Summary
+
+**P&L:** -$6.40 (-0.06% on deployed capital)
+**Positions Opened:** 7
+**Positions Closed:** 7
+**Win Rate:** 3/7 (42.9%)
+**System Uptime:** Full
+**Branch:** main (with risk-off filter 9:30-10:00 AM ET)
+
+### Market Conditions
+
+**A/B Test Comparison Day:**
+
+- VPS (control, no risk-off filter) vs Laptop (test, risk-off 9:30-10:00 AM)
+- All entries occurred 3:18-3:33 PM ET (afternoon cluster)
+- Risk-off filter had no effect (no morning signals fired during 9:30-10:00 AM window)
+- All exits at 8:52 PM ET (overnight liquidation)
+- Market breadth metric now displaying in minute evaluations
+- Improved market status display showing risk-off window
+
+### Trade Results
+
+#### Winners (3/7 = 42.9%)
+
+- **CVX**: +$2.71 (+0.27%) - Energy strength
+- **GOOGL**: +$2.47 (+0.25%) - Tech resilience
+- **MSFT**: +$0.29 (+0.03%) - Marginal gain
+
+**Total Gains:** +$5.47
+
+#### Losers (4/7 = 57.1%)
+
+- **ASML**: -$8.05 (-0.81%) - Worst performer, semiconductor weakness
+- **WMT**: -$2.30 (-0.23%) - Retail sector
+- **BABA**: -$1.08 (-0.11%) - Chinese tech
+- **GE**: -$0.44 (-0.04%) - Industrial sector
+
+**Total Losses:** -$11.87
+
+**Net P&L:** -$6.40
+**Total Deployed Capital:** $6,999.93 (7 positions × ~$1000)
+
+### Critical Incidents
+
+**None.** Clean operation:
+
+- All 7 positions entered successfully
+- All 7 positions liquidated at EOD
+- No duplicate orders
+- No API timeouts or freezes
+- Market breadth and status display enhancements working correctly
+
+### Strategy Performance
+
+**Entry Timing:**
+
+- All entries clustered 3:18-3:33 PM ET (15-minute window)
+- No morning entries despite risk-off filter being active
+- Afternoon entry pattern continues from recent sessions
+- Suggests calibration/signals happening late in day
+
+**Exit Analysis:**
+
+- All exits via EOD liquidation (8:52 PM ET)
+- No take profit hits (2% target)
+- No stop loss hits (-5% target)
+- All positions held ~5 hours from entry to liquidation
+- Suggests ranging market conditions
+
+**Symbol Performance:**
+
+- Tech Mixed: GOOGL (+$2.47), MSFT (+$0.29), ASML (-$8.05)
+- Energy Positive: CVX (+$2.71)
+- Retail Negative: WMT (-$2.30)
+- Chinese Tech Weak: BABA (-$1.08)
+- Industrial Weak: GE (-$0.44)
+
+### A/B Test Analysis
+
+**Test Design:**
+
+- VPS (control): Original code without risk-off filter
+- Laptop (test): New code with risk-off filter (9:30-10:00 AM ET)
+- Both running on separate paper accounts
+
+**Today's Results:**
+
+- Both builds entered at identical times (3:18-3:33 PM)
+- No signals fired during 9:30-10:00 AM risk-off window
+- This was another "neutral comparison day" - filter had no effect
+- Different fill prices between builds led to ~$11.78 P&L variance (slippage)
+- Minimal difference in performance between control and test
+
+**Conclusion:**
+
+Risk-off filter effectiveness cannot be evaluated until signals fire during the morning window. Need continued monitoring over more trading days.
+
+### Lessons Learned
+
+1. **Market Breadth Display Working:**
+   - New "Market breadth: X/Y advancing" metric showing in evaluations
+   - Provides real-time market sentiment visibility
+   - Helps identify risk-off conditions when breadth is poor
+
+2. **Risk-Off Status Visibility Improved:**
+   - Three-state market status now displays:
+     - "Market: CLOSED"
+     - "Market: OPEN (Risk-off until 10:00:00 ET)"
+     - "Market: OPEN (Trading active)"
+   - Critical for A/B test monitoring
+
+3. **Afternoon Entry Pattern Continues:**
+   - Recent sessions: 3:18-3:33 PM ET today, 2:32-3:32 PM yesterday
+   - Consistent late-day entry timing
+   - May reduce profit opportunity (less time for positions to develop)
+   - Consider investigating calibration timing
+
+4. **Win Rate Stable (42.9%):**
+   - Previous sessions: 62.1% (Jan 21), 18% (Jan 20 holiday)
+   - Today's 42.9% aligns with historical backtest expectations
+   - Losses controlled, no outlier drawdowns
+
+5. **Fill Price Variance Significant:**
+   - A/B test showed $11.78 difference purely from slippage
+   - Paper trading fill variance can obscure strategy performance
+   - Need multiple days of data to separate signal from noise
+
+6. **ASML Weakness Pattern:**
+   - Largest loser today (-$8.05)
+   - Semiconductor sector showing volatility
+   - May warrant sector-specific risk monitoring
+
+### Configuration Status
+
+**Current Settings:**
+
+- Spread filter: 30 bps (unchanged)
+- Volume filter: 0.5x minimum ratio (unchanged)
+- Edge filter: 10 bps minimum (unchanged)
+- Position size: $1000 notional (unchanged)
+- Risk-off window: 9:30-10:00 AM ET (active on laptop test build)
+- Crypto: DISABLED (unchanged since 2026-01-13)
+
+**Recent Enhancements (committed today):**
+
+- Market breadth metric (advancing vs declining count)
+- Improved market status display (three-state: closed/risk-off/active)
+
+### Action Items for Tomorrow
+
+- [ ] Continue A/B test monitoring (waiting for morning signals to evaluate risk-off filter)
+- [ ] Track market breadth correlation with P&L outcomes
+- [ ] Monitor if afternoon entry pattern persists
+- [ ] Consider entry time cutoff to avoid late-day positions with limited development time
+- [ ] Watch for any morning volatility days where risk-off filter activates
+
+### Code Changes
+
+**Committed today (2 atomic commits):**
+
+1. `54e3108` - Add market breadth metric to evaluation displays
+   - Added daily_change_pct field to SymbolEvaluation struct
+   - Calculate and display advancing/declining stock count
+   - Shows breadth in both startup assessment and minute evaluations
+
+2. `e4f7684` - Improve market status display to show risk-off window
+   - Three-state market status logging
+   - Clearly shows when risk-off filter is active
+   - Critical for A/B test visibility
+
+### Notes
+
+- First day testing market breadth and risk-off status display enhancements
+- Small loss (-$6.40) within acceptable variance
+- A/B test inconclusive - need more volatile morning to evaluate filter
+- System stability continues to be excellent (no technical issues)
+- Paper trading slippage variance highlighted need for longer testing periods
+- Market breadth and status logging improvements working as designed
+
+---
+
+## 2026-01-29 (Wednesday)
+
+### Summary
+
+**Laptop (Test Build):**
+- **P&L:** -$55.03 (-1.38% on deployed capital)
+- **Positions Opened:** 4
+- **Positions Closed:** 4
+- **Win Rate:** 1/4 (25%)
+- **System Uptime:** Full
+- **Branch:** main (with risk-off filter 9:30-10:00 AM ET)
+
+**VPS (Control Build):**
+- **P&L:** -$16.58 (-0.33% on deployed capital)
+- **Positions Opened:** 5
+- **Positions Closed:** 5
+- **Win Rate:** 2/5 (40%)
+- **System Uptime:** Full
+- **Branch:** main (no risk-off filter)
+
+### Market Conditions
+
+**A/B Test Comparison Day:**
+
+- VPS vs Laptop running in parallel on separate paper accounts
+- Different symbol selection between builds despite same strategy
+- Late afternoon entries continued (2:48-8:19 PM ET)
+- All exits at EOD liquidation (8:51-8:52 PM)
+- No morning signals fired during 9:30-10:00 AM risk-off window
+- Mean reversion strategy dominated all entries (100% of trades)
+
+### Trade Results
+
+#### Laptop (Test Build)
+
+**Winner (1/4 = 25%):**
+- **TSLA**: +$2.24 (+0.22%) - Only profitable position
+
+**Losers (3/4 = 75%):**
+- **CRML** (1st trade): -$31.29 (-3.13%) - Entered 3:21 PM, exited 3:50 PM (only 29 min hold, hit stop/trailing)
+- **CRML** (2nd trade): -$21.59 (-2.16%) - Re-entered 4:18 PM despite previous loss
+- **CAT**: -$4.39 (-0.44%) - Very late entry at 8:19 PM
+
+**Total Deployed:** $3,999.96 (4 positions × ~$1000)
+**Net P&L:** -$55.03
+
+#### VPS (Control Build)
+
+**Winners (2/5 = 40%):**
+- **MS**: +$6.52 (+0.65%) - Best performer
+- **JNJ**: +$0.26 (+0.03%) - Marginal gain
+
+**Losers (3/5 = 60%):**
+- **TSLA**: -$14.48 (-1.45%) - Worst performer
+- **CAT**: -$7.16 (-0.72%)
+- **COST**: -$1.72 (-0.17%)
+
+**Total Deployed:** $4,999.95 (5 positions × ~$1000)
+**Net P&L:** -$16.58
+
+### A/B Test Comparison
+
+**Performance Delta:** Laptop performed $38.45 worse than VPS
+
+**Key Differences:**
+
+1. **Symbol Selection Divergence:**
+   - Laptop: CRML (x2), TSLA, CAT (3 unique symbols)
+   - VPS: COST, TSLA, MS, JNJ, CAT (5 unique symbols)
+   - VPS avoided CRML entirely (which was laptop's biggest loser)
+   - Both traded TSLA and CAT but at different prices/times
+
+2. **Entry Timing:**
+   - Laptop: 3:21 PM - 8:19 PM (very late cluster)
+   - VPS: 2:48 PM - 7:18 PM (slightly earlier, more spread out)
+
+3. **Diversification:**
+   - Laptop: Lower diversification (3 symbols, one traded twice)
+   - VPS: Better diversification (5 unique symbols)
+
+4. **CRML Disaster on Laptop:**
+   - Two losing trades totaling -$52.88 (96% of total loss)
+   - First position hit early exit after 29 minutes
+   - System re-entered same symbol despite immediate loss
+   - VPS didn't trade CRML at all
+
+5. **Risk-Off Filter:**
+   - Still no effect (no morning signals during 9:30-10:00 AM window)
+   - Another neutral comparison day
+
+### Critical Incidents
+
+**Laptop Issue - CRML Re-entry After Loss:**
+
+First CRML position:
+- Entry: 3:21 PM at $14.70
+- Exit: 3:50 PM at $14.24 (29 minutes later)
+- Loss: -$31.29 (-3.13%)
+- Likely hit trailing stop or stop loss
+
+Second CRML position:
+- Entry: 4:18 PM at $14.36 (28 minutes after first exit)
+- Exit: 8:39 PM at $14.05 (EOD liquidation)
+- Loss: -$21.59 (-2.16%)
+
+**Issue:** System re-entered failing symbol immediately after taking loss. No "cooldown" period to avoid catching falling knives.
+
+### Strategy Performance
+
+**API Analysis - All Trades Were Mean Reversion:**
+
+Fetched order history from Alpaca API revealed:
+- Laptop: All 4 entries were `mean_reversion` strategy
+- Strategy parameters: TP: 100 bps (10%), SL: -3%, Trailing: 2%
+- Mean reversion completely dominated entries
+- No MA crossover or relative strength signals fired
+
+**Historical Strategy Breakdown (Jan 13-29):**
+- **Mean Reversion:** 162 trades (80.2%)
+- **MA Crossover:** 28 trades (13.9%)
+- **Relative Strength:** 11 trades (5.4%)
+
+**Mean Reversion Issues Identified:**
+
+1. **Catching Falling Knives:**
+   - CRML identified as "oversold" but continued falling
+   - Mean reversion assumes dips are temporary - not always true
+   - No trend filter to avoid buying into downtrends
+
+2. **Immediate Re-entry:**
+   - System re-entered CRML 28 minutes after taking -3.13% loss
+   - No cooldown or blacklist mechanism
+   - Doubled down on losing position
+
+3. **Late Day Entries:**
+   - 8:19 PM entry (CAT) only 40 minutes before liquidation
+   - Insufficient time for mean reversion to play out
+   - Need entry cutoff time (e.g., no entries after 3:00 PM)
+
+4. **Dominance Over Other Strategies:**
+   - 80% of all trades are mean reversion
+   - Far more aggressive than MA crossover (14%) or relative strength (5%)
+   - May need to reduce sensitivity or disable entirely
+
+### Lessons Learned
+
+1. **Mean Reversion Strategy Needs Work:**
+   - Responsible for 80% of trades but recent losses significant
+   - Catching falling knives (CRML, ASML in recent days)
+   - Consider adding trend filter (e.g., only buy mean reversion in uptrend)
+   - Or disable mean reversion temporarily to test other strategies
+
+2. **Symbol Re-entry Risk:**
+   - No mechanism to prevent re-entering recently closed losers
+   - CRML re-entered 28 minutes after -3.13% loss
+   - Need cooldown period (e.g., 24 hours) or session-based blacklist
+
+3. **Entry Time Cutoff Needed:**
+   - 8:19 PM entry absurd - only 40 minutes until liquidation
+   - Should block entries within 1-2 hours of EOD
+   - Mean reversion needs time to develop
+
+4. **A/B Test Still Inconclusive:**
+   - No morning signals during risk-off window
+   - Performance difference due to symbol selection variance, not filter
+   - Need volatile morning to properly evaluate risk-off effectiveness
+
+5. **VPS Better Diversification:**
+   - 5 symbols vs 3 symbols reduced concentration risk
+   - Avoiding CRML was luck, not design
+   - Random symbol selection variance significant
+
+6. **Strategy Distribution Imbalance:**
+   - Mean reversion 80%, MA crossover 14%, relative strength 5%
+   - May want more balanced strategy allocation
+   - Consider reducing mean reversion sensitivity
+
+### Configuration Status
+
+**Current Settings:**
+
+- Spread filter: 30 bps (unchanged)
+- Volume filter: 0.5x minimum ratio (unchanged)
+- Edge filter: 10 bps minimum (unchanged)
+- Position size: $1000 notional (unchanged)
+- Risk-off window: 9:30-10:00 AM ET (active on laptop only)
+- Crypto: DISABLED (unchanged since 2026-01-13)
+
+**Strategy Weighting (observed):**
+
+- Mean reversion: 80.2% of all trades
+- MA crossover: 13.9% of all trades
+- Relative strength: 5.4% of all trades
+
+### Action Items for Tomorrow
+
+- [ ] Consider disabling mean reversion temporarily to test other strategies
+- [ ] Implement entry time cutoff (e.g., no entries after 3:00 PM ET)
+- [ ] Add symbol cooldown/blacklist after stop loss hits
+- [ ] Add trend filter to mean reversion (only buy in uptrend)
+- [ ] Continue A/B test (waiting for morning volatility)
+- [ ] Monitor if MA crossover and relative strength perform better
+
+### Code Changes
+
+**None.** Same codebase as Jan 28 running on both VPS and laptop.
+
+**Potential Changes Needed:**
+
+1. Entry time cutoff logic
+2. Symbol cooldown/blacklist mechanism
+3. Trend filter for mean reversion
+4. Strategy sensitivity adjustments
+
+### Notes
+
+- **Worst day since Jan 20** (-$55.03 on laptop, -$16.58 on VPS)
+- Mean reversion strategy showed significant weakness
+- CRML re-entry highlighted need for symbol cooldown logic
+- Late entry (8:19 PM) demonstrates need for time cutoff
+- Strategy analysis from API revealed 80/14/5 mean/MA/relative split
+- A/B test continues to be inconclusive (no morning signals)
+- Both builds lost money, but laptop significantly worse due to CRML double loss
