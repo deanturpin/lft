@@ -8,7 +8,7 @@ A fully automated C++23 multi-strategy trading system for US equities, built on 
 
 ### Multi-Strategy Framework
 
-- 6 concurrent trading strategies evaluated every minute
+- 5 concurrent trading strategies evaluated every minute
 - Automatic calibration on 30 days of historic data with realistic spread simulation
 - Only enables profitable strategies based on backtest results
 - Per-strategy performance tracking with win rate and P&L metrics
@@ -17,12 +17,11 @@ A fully automated C++23 multi-strategy trading system for US equities, built on 
 
 ### Trading Strategies
 
-1. **Dip Buying** - Entry on 2% price drops
-2. **MA Crossover** - 5-period crosses 20-period moving average
-3. **Mean Reversion** - Price >2 standard deviations below MA
-4. **Volatility Breakout** - Expansion from compression with volume
-5. **Relative Strength** - Outperformance vs market basket by >0.5%
-6. **Volume Surge** - 2x average volume with upward momentum >0.5%
+1. **MA Crossover** - 5-period crosses 20-period moving average
+2. **Mean Reversion** - Price >2 standard deviations below MA (currently disabled)
+3. **Volatility Breakout** - Expansion from compression with volume
+4. **Relative Strength** - Outperformance vs market basket by >0.5%
+5. **Volume Surge** - 2x average volume with upward momentum >0.5%
 
 ### Automated Risk Management
 
@@ -152,7 +151,7 @@ make run
   mean_reversion       ENABLED  P&L=$  456.78 WR= 61.3%
   ...
 
-  3 of 5 strategies enabled for live trading
+  4 of 5 strategies enabled for live trading (mean reversion disabled)
 ```
 
 #### Phase 2: Live Trading
@@ -212,7 +211,7 @@ If a strategy fires, you'll see:
 src/
   lft.cxx           - Main trading loop with auto-calibration
   alpaca_client.cxx - Alpaca API integration (market data, orders, positions)
-  strategies.cxx    - Six trading strategy implementations
+  strategies.cxx    - Five trading strategy implementations
 include/
   defs.h            - Trading constants and compile-time validation
   alpaca_client.h   - API client interface
