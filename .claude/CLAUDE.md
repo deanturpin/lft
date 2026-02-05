@@ -61,15 +61,15 @@ Note: Simple `source .env` often fails auth - use `set -a && source .env && set 
 
 ## Known Issues
 
-### EOD Liquidation Failures
+### EOD Liquidation (Laptop Dependency)
 
-- **Feb 2, 2026**: SAP position entered at 11:19 AM ET, failed to liquidate at 3:55 PM EOD cutoff
-- **Feb 4, 2026**: SAP position entered at 11:17 AM ET, failed to liquidate at 3:55 PM EOD cutoff
+**Issue**: System runs on laptop, positions left open overnight when laptop closed before 3:55 PM ET EOD cutoff.
 
-Pattern: Positions are entering correctly but EOD liquidation (scheduled for 3:55 PM ET) is not executing. Possible causes:
+Examples:
 
-- System not running at EOD time
-- EOD liquidation logic has a bug
-- System crashes before reaching EOD time
+- **Feb 2, 2026**: SAP position entered at 11:19 AM ET, laptop closed before 3:55 PM → left open overnight (eventually recovered +$11.86)
+- **Feb 4, 2026**: SAP position entered at 11:17 AM ET, laptop closed before 3:55 PM → left open overnight (+$11.86 unrealized)
 
-Investigation needed: Check if `check_panic_exits()` is being called at EOD cutoff time and if positions are being properly closed.
+**Solution**: Deploy to VPS for 24/7 operation, or ensure laptop stays open until after 3:55 PM ET on trading days.
+
+Note: EOD liquidation logic in `check_panic_exits()` is working correctly - it just needs the system to be running at 3:55 PM ET.
