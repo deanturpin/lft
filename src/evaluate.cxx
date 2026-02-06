@@ -6,8 +6,10 @@
 #include "defs.h"
 #include "strategies.h"
 #include <algorithm>
+#include <chrono>
 #include <format>
 #include <map>
+#include <thread>
 #include <numeric>
 #include <print>
 #include <set>
@@ -58,6 +60,9 @@ MarketEvaluation evaluate_market(AlpacaClient &client,
     // Fetch latest bar data and snapshot
     auto bars_opt = client.get_bars(symbol, "15Min", 100);
     auto snapshot_opt = client.get_snapshot(symbol);
+
+    // Delay to avoid API rate limiting (100ms = max 600 req/min, well under limit)
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     if (not bars_opt or not snapshot_opt) {
       eval.status_summary = "Data unavailable";
