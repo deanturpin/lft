@@ -41,15 +41,17 @@ Low Frequency Trader - algorithmic trading system for US stocks and ETFs built i
 
 ## Helper Scripts
 
-Always use existing scripts in `bin/` directory instead of running API calls directly:
+**CRITICAL: ALWAYS use existing scripts FIRST before trying direct API calls with curl!**
 
+Available scripts in project root and `bin/` directory:
+
+- `fetch_orders.sh [date]` - **PRIMARY SCRIPT** - Fetch orders for specific date (defaults to today), sources .env properly
 - `bin/fetch_today_trades.sh` - Fetch today's closed orders with P&L summary
-- `bin/fetch_orders.sh [date]` - Fetch orders for specific date
+- `bin/fetch_orders.sh [date]` - Fetch orders for specific date (requires pre-sourced env)
 - `bin/post_match_analysis.sh` - Post-session analysis
-- `fetch_orders.sh [date]` - Simple order fetch (defaults to today)
 - `backtest_exit_params.sh` - Test different TP/SL combinations
 
-To check positions: Use curl with proper env loading:
+**Only use direct curl commands as a last resort.** If you must use curl, use proper env loading:
 
 ```bash
 set -a && source .env && set +a && curl -s "https://paper-api.alpaca.markets/v2/positions" \

@@ -65,9 +65,17 @@ MarketEvaluation evaluate_market(AlpacaClient &client,
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     if (not bars_opt or not snapshot_opt) {
-      eval.status_summary = "Data unavailable";
+      // Log which API call failed for debugging
+      if (not bars_opt and not snapshot_opt)
+        eval.status_summary = "Both APIs failed";
+      else if (not bars_opt)
+        eval.status_summary = "Bars API failed";
+      else
+        eval.status_summary = "Snapshot API failed";
+
       result.symbols.push_back(eval);
       network_failed = true; // Stop trying other symbols to avoid error spam
+      std::println("  ⚠️  {} data fetch failed - stopping further API calls to avoid spam", symbol);
       continue;
     }
 
@@ -196,12 +204,21 @@ void display_evaluation(const MarketEvaluation &eval,
     return s.daily_change_pct > 0.0;
   });
 
+  // Count symbols with data vs errors
+  const auto symbols_with_data = std::ranges::count_if(eval.symbols, [](const auto &s) {
+    return s.price > 0.0;
+  });
+  const auto symbols_with_errors = eval.symbols.size() - symbols_with_data;
+
   std::println("\n📥 Checking entries at {:%H:%M:%S}",
                std::chrono::floor<std::chrono::seconds>(now));
+  std::println("  Symbols evaluated: {}/{} ({}with data errors)",
+               symbols_with_data, eval.symbols.size(),
+               symbols_with_errors > 0 ? std::format("{} ", symbols_with_errors) : "");
   std::println("  Tradeable symbols: {}/{}", eval.tradeable_count, eval.symbols.size());
   std::println("  Average spread:    {:.1f} bps", eval.avg_spread_bps);
   std::println("  Active signals:    {}", eval.total_signals);
-  std::println("  Market breadth:    {}/{} advancing", advancing, eval.symbols.size());
+  std::println("  Market breadth:    {}/{} advancing", advancing, symbols_with_data);
 
   // Build strategy name list for header
   auto strategy_names = std::vector<std::string>{};
@@ -209,25 +226,38 @@ void display_evaluation(const MarketEvaluation &eval,
     if (enabled)
       strategy_names.push_back(name);
 
-  std::println("\n  Symbol   Price    Spread  Edge   Vol    Strategies  Ready  Status");
-  std::println("                     (bps)   (bps)  Ratio");
-  std::println("  ────────────────────────────────────────────────────────────────────────────");
+  // Only show table if we have data for some symbols
+  if (symbols_with_data > 0) {
+    std::println("\n  Symbol   Price    Spread  Edge   Vol    Strategies  Ready  Status");
+    std::println("                     (bps)   (bps)  Ratio");
+    std::println("  ────────────────────────────────────────────────────────────────────────────");
 
-  for (const auto &s : eval.symbols) {
-    // Build strategy indicator string (✓ or ✗ for each strategy)
-    auto strategy_str = std::string{};
-    for (const auto &name : strategy_names) {
-      if (s.strategy_signals.contains(name)) {
-        strategy_str += s.strategy_signals.at(name) ? "✓" : "✗";
-      } else {
-        strategy_str += "-";
+    for (const auto &s : eval.symbols) {
+      // Skip symbols with no data (network errors)
+      if (s.price == 0.0)
+        continue;
+
+      // Build strategy indicator string (✓ or ✗ for each strategy)
+      auto strategy_str = std::string{};
+      for (const auto &name : strategy_names) {
+        if (s.strategy_signals.contains(name)) {
+          strategy_str += s.strategy_signals.at(name) ? "✓" : "✗";
+        } else {
+          strategy_str += "-";
+        }
+        strategy_str += " ";
       }
-      strategy_str += " ";
+
+      const auto ready_indicator = s.ready_to_trade ? "✓" : " ";
+
+      std::println("  {:7} ${:7.2f}  {:>6.0f}  {:>6.0f}  {:>5.2f}  {:11} {:5}  {}",
+                   s.symbol, s.price, s.spread_bps, s.edge_bps, s.volume_ratio, strategy_str, ready_indicator, s.status_summary);
     }
+  }
 
-    const auto ready_indicator = s.ready_to_trade ? "✓" : " ";
-
-    std::println("  {:7} ${:7.2f}  {:>6.0f}  {:>6.0f}  {:>5.2f}  {:11} {:5}  {}",
-                 s.symbol, s.price, s.spread_bps, s.edge_bps, s.volume_ratio, strategy_str, ready_indicator, s.status_summary);
+  // Show error summary if any symbols failed
+  if (symbols_with_errors > 0) {
+    std::println("\n  ⚠️  {} symbol(s) had data fetch errors (stopped early to avoid API spam)", symbols_with_errors);
+    std::println("      Entry checking will continue for individual symbols that succeed");
   }
 }

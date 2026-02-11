@@ -51,8 +51,10 @@ void check_entries(AlpacaClient &client,
     auto bars_opt = client.get_bars(symbol, "15Min", 100);
     auto snapshot_opt = client.get_snapshot(symbol);
 
-    if (not bars_opt or not snapshot_opt)
+    if (not bars_opt or not snapshot_opt) {
+      std::println("  ⚠️  {} - data fetch failed, skipping", symbol);
       continue;
+    }
 
     const auto &bars = *bars_opt;
     const auto &snapshot = *snapshot_opt;

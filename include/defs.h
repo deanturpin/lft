@@ -5,8 +5,8 @@ constexpr auto notional_amount = 1000.0;  // Dollar amount per trade
 constexpr auto calibration_days = 30;     // Duration for strategy calibration
 constexpr auto min_trades_to_enable = 10; // Minimum trades to enable strategy
 
-// Exit parameters (2/1/0.9 pattern: TP 2%, SL 1%, TS 0.9%)
-constexpr auto take_profit_pct = 0.02;      // 2% take profit threshold
+// Exit parameters (10/1/0.9 pattern: TP 10%, SL 1%, TS 0.9%)
+constexpr auto take_profit_pct = 0.10;      // 10% take profit threshold
 constexpr auto stop_loss_pct = 0.01;       // 1% stop loss threshold
 constexpr auto trailing_stop_pct = 0.009;   // 0.9% trailing stop threshold
 constexpr auto panic_stop_loss_pct = 0.06; // 3.5% panic stop (safety net)
