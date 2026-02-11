@@ -16,8 +16,8 @@ namespace {
 
 // Dump historical bars to CSV files for offline analysis
 void dump_bars_to_csv(const std::map<std::string, std::vector<Bar>> &all_bars) {
-  // Create /tmp/lft_backtest directory if it doesn't exist
-  const auto dir = std::string{"/tmp/lft_backtest"};
+  // Create tmp directory inside repo if it doesn't exist
+  const auto dir = std::string{"tmp"};
   std::system(("mkdir -p " + dir).c_str());
 
   for (const auto &[symbol, bars] : all_bars) {

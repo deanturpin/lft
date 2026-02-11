@@ -29,6 +29,7 @@ _deps/
 
 # Trading logs (generated data, not source code)
 *.csv
+tmp/
 
 VPS_DEPLOYMENT.md
 Dockerfile
