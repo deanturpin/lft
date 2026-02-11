@@ -16,8 +16,12 @@ namespace {
 
 // Dump historical bars to CSV files for offline analysis
 void dump_bars_to_csv(const std::map<std::string, std::vector<Bar>> &all_bars) {
+  // Create /tmp/lft_backtest directory if it doesn't exist
+  const auto dir = std::string{"/tmp/lft_backtest"};
+  std::system(("mkdir -p " + dir).c_str());
+
   for (const auto &[symbol, bars] : all_bars) {
-    auto filename = std::string{"backtest_bars_"} + symbol + ".csv";
+    auto filename = dir + "/backtest_bars_" + symbol + ".csv";
     auto file = std::ofstream{filename};
 
     if (not file)
@@ -131,7 +135,7 @@ StrategyStats run_backtest_for_strategy(
       }();
 
       if (not positions.contains(symbol) and cash >= notional_amount and
-          history.prices.size() >= 20 and not is_risk_off_period) {
+          history.prices.size() >= 21 and not is_risk_off_period) {
 
         // Evaluate strategy signal
         auto signal = StrategySignal{};
