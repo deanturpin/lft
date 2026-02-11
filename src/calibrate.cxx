@@ -5,6 +5,7 @@
 #include "lft.h"
 #include "strategies.h"
 #include <algorithm>
+#include <fstream>
 #include <map>
 #include <print>
 #include <string>
@@ -12,6 +13,31 @@
 #include <vector>
 
 namespace {
+
+// Dump historical bars to CSV files for offline analysis
+void dump_bars_to_csv(const std::map<std::string, std::vector<Bar>> &all_bars) {
+  for (const auto &[symbol, bars] : all_bars) {
+    auto filename = std::string{"backtest_bars_"} + symbol + ".csv";
+    auto file = std::ofstream{filename};
+
+    if (not file)
+      continue;
+
+    // CSV header
+    file << "timestamp,open,high,low,close,volume\n";
+
+    // Write each bar
+    for (const auto &bar : bars)
+      file << bar.timestamp << ","
+           << bar.open << ","
+           << bar.high << ","
+           << bar.low << ","
+           << bar.close << ","
+           << bar.volume << "\n";
+
+    std::println("  📊 Dumped {} bars for {} to {}", bars.size(), symbol, filename);
+  }
+}
 
 // Run backtest for a single strategy across all symbols
 StrategyStats run_backtest_for_strategy(
@@ -91,8 +117,21 @@ StrategyStats run_backtest_for_strategy(
       }
 
       // Check entry signals (only if no position and enough cash)
+      // Skip entries during risk-off period (first 30 min after market open)
+      // This matches live trading behaviour
+      const auto bar_time_str = std::string_view{bar.timestamp};
+      const auto is_risk_off_period = [&bar_time_str]() {
+        // Extract hour and minute from ISO timestamp (format: YYYY-MM-DDTHH:MM:SSZ)
+        if (bar_time_str.size() < 16)
+          return false;
+        const auto hour = std::stoi(std::string{bar_time_str.substr(11, 2)});
+        const auto minute = std::stoi(std::string{bar_time_str.substr(14, 2)});
+        // Market opens at 14:30 UTC (9:30 AM ET), risk-off until 15:00 UTC (10:00 AM ET)
+        return (hour == 14 and minute >= 30) or (hour == 15 and minute == 0);
+      }();
+
       if (not positions.contains(symbol) and cash >= notional_amount and
-          history.prices.size() >= 20) {
+          history.prices.size() >= 20 and not is_risk_off_period) {
 
         // Evaluate strategy signal
         auto signal = StrategySignal{};
@@ -162,6 +201,9 @@ calibrate(const std::map<std::string, std::vector<Bar>> &all_bars,
           double starting_capital) {
   auto enabled = std::map<std::string, bool>{};
   auto strategy_stats = std::map<std::string, StrategyStats>{};
+
+  // Dump historical bars to CSV files
+  dump_bars_to_csv(all_bars);
 
   std::println("\n  Using starting capital: ${:.2f}", starting_capital);
 
