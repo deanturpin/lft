@@ -3,6 +3,7 @@
 #include "alpaca_client.h"
 #include "bps_utils.h"
 #include <cmath>
+#include <cstdint>
 #include <deque>
 #include <map>
 #include <string>
