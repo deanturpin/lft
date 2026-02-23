@@ -6,9 +6,9 @@ constexpr auto calibration_days = 30;     // Duration for strategy calibration
 constexpr auto min_trades_to_enable = 10; // Minimum trades to enable strategy
 
 // Exit parameters (3/2/1 pattern: TP 3%, SL 2%, TS 1%)
-constexpr auto take_profit_pct = 0.03;      // 3% take profit threshold
-constexpr auto stop_loss_pct = 0.02;        // 2% stop loss threshold
-constexpr auto trailing_stop_pct = 0.01;    // 1% trailing stop threshold
+constexpr auto take_profit_pct = 0.03;     // 3% take profit threshold
+constexpr auto stop_loss_pct = 0.02;       // 2% stop loss threshold
+constexpr auto trailing_stop_pct = 0.01;   // 1% trailing stop threshold
 constexpr auto panic_stop_loss_pct = 0.06; // 3.5% panic stop (safety net)
 
 // Exit parameter validation
@@ -49,7 +49,7 @@ constexpr auto min_edge_bps =
 #include <vector>
 
 inline const auto stocks = std::vector<std::string>{
-    // =========================
+    // =========================1
     // Broad indices / factors
     // =========================
     "SPY", // S&P 500
